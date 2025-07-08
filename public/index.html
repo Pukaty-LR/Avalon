@@ -2,55 +2,94 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <title>Pixelová Říše - Lobby</title>
+    <title>Pixelová Říše</title>
     <link rel="stylesheet" href="styl.css">
 </head>
 <body>
-    <div class="lobby-container" id="name-selection">
-        <h1>Pixelová Říše</h1>
-        <input type="text" id="playerName" placeholder="Zadej své jméno...">
-        <button id="enterLobbyBtn">Vstoupit do lobby</button>
-    </div>
-
-    <div class="lobby-container" id="game-selection" style="display: none;">
-        <h2>Vítej, <span id="lobbyPlayerName"></span>!</h2>
-        <button id="findGameBtn">Najít hru</button>
-        <button id="createGameBtn">Vytvořit soukromou hru</button>
-        <div class="join-game">
-            <input type="text" id="gameCodeInput" placeholder="Zadej kód hry...">
-            <button id="joinGameBtn">Připojit se kódem</button>
+    <!-- Sekce LOBBY, na začátku viditelná -->
+    <div id="lobby-section">
+        <div class="lobby-container" id="name-selection">
+            <h1>Pixelová Říše</h1>
+            <input type="text" id="playerName" placeholder="Zadej své jméno...">
+            <button id="enterLobbyBtn">Vstoupit do lobby</button>
+        </div>
+        <div class="lobby-container" id="game-selection" style="display: none;">
+            <h2>Vítej, <span id="lobbyPlayerName"></span>!</h2>
+            <button id="findGameBtn">Najít hru</button>
+            <button id="createGameBtn">Vytvořit soukromou hru</button>
+            <div class="join-game">
+                <input type="text" id="gameCodeInput" placeholder="Zadej kód hry...">
+                <button id="joinGameBtn">Připojit se kódem</button>
+            </div>
+        </div>
+        <div class="lobby-container" id="waiting-room" style="display: none;">
+            <h3>Čekárna</h3>
+            <p>Kód tvé hry: <strong id="gameCodeDisplay"></strong></p>
+            <h4>Hráči v lobby:</h4>
+            <ul id="playerList"></ul>
+            <button id="startGameBtn" disabled>Spustit hru (min. 2 hráči)</button>
         </div>
     </div>
 
-    <div class="lobby-container" id="waiting-room" style="display: none;">
-        <h3>Čekárna</h3>
-        <p>Kód tvé hry: <strong id="gameCodeDisplay"></strong></p>
-        <p>Pošli tento kód přátelům nebo počkej, až se někdo připojí.</p>
-        <h4>Hráči v lobby:</h4>
-        <ul id="playerList"></ul>
-        <button id="startGameBtn" disabled>Spustit hru (min. 2 hráči)</button>
+    <!-- Sekce HRA, na začátku skrytá -->
+    <div id="game-section" style="display: none;">
+        <div class="info-column">
+            <div class="stats-panel">
+                <h2 id="player-name-display">STAV ŘÍŠE</h2>
+                <div class="stat"><span>💰 Zlato:</span> <span id="gold-display" class="stat-value">0</span></div>
+                <div class="stat"><span>💎 Krystaly:</span> <span id="crystals-display" class="stat-value">0</span></div>
+                <div class="stat"><span>⚔️ Jednotky:</span> <span id="units-display" class="stat-value">0</span></div>
+                <div class="stat"><span>🛰️ Expedice:</span> <span id="expeditions-display" class="stat-value">0</span></div>
+                <div class="stat"><span>🌍 Území:</span> <span id="territory-display" class="stat-value">0</span></div>
+                <button class="unit-buy-button" id="buy-unit-button">Koupit jednotku (50💰)</button>
+                <div class="stat-slider">
+                    <label for="expedition-slider">Velikost expedice:</label>
+                    <input type="range" id="expedition-slider" min="1" max="100" value="10">
+                    <span id="expedition-slider-value">10% (0)</span>
+                </div>
+            </div>
+            <div class="minimap-panel">
+                <h3>Minimapa</h3>
+                <canvas id="minimap" width="280" height="280"></canvas>
+            </div>
+        </div>
+        <div class="game-column">
+            <div id="game-viewport">
+                <canvas id="game-canvas"></canvas>
+            </div>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
 
+        // --- Přepínání pohledů ---
+        const lobbySection = document.getElementById('lobby-section');
+        const gameSection = document.getElementById('game-section');
+
+        function showLobby() {
+            lobbySection.style.display = 'flex';
+            gameSection.style.display = 'none';
+        }
+        function showGame() {
+            lobbySection.style.display = 'none';
+            gameSection.style.display = 'flex';
+        }
+
+        // --- LOBBY LOGIKA ---
         const nameSelection = document.getElementById('name-selection');
         const gameSelection = document.getElementById('game-selection');
         const waitingRoom = document.getElementById('waiting-room');
-
         const enterLobbyBtn = document.getElementById('enterLobbyBtn');
         const findGameBtn = document.getElementById('findGameBtn');
         const createGameBtn = document.getElementById('createGameBtn');
         const joinGameBtn = document.getElementById('joinGameBtn');
         const startGameBtn = document.getElementById('startGameBtn');
-        
         const playerNameInput = document.getElementById('playerName');
-        
-        let playerName = '';
 
         enterLobbyBtn.addEventListener('click', () => {
-            playerName = playerNameInput.value;
+            const playerName = playerNameInput.value;
             if (!playerName) { alert('Zadej jméno.'); return; }
             socket.emit('playerEnteredLobby', playerName);
             document.getElementById('lobbyPlayerName').textContent = playerName;
@@ -64,10 +103,7 @@
             const code = document.getElementById('gameCodeInput').value;
             if (code) socket.emit('joinGame', code);
         });
-        startGameBtn.addEventListener('click', () => {
-            document.body.innerHTML = '<h1>Hra se spouští, čekejte na načtení dat...</h1>';
-            socket.emit('startGame');
-        });
+        startGameBtn.addEventListener('click', () => socket.emit('startGame'));
 
         socket.on('gameCreated', (gameCode) => {
             gameSelection.style.display = 'none';
@@ -89,27 +125,140 @@
                 const li = document.createElement('li');
                 li.textContent = p.name + (index === 0 ? ' (Host)' : '');
                 playerListEl.appendChild(li);
-                if (p.id === socket.id && index === 0) {
-                    meIsHost = true;
-                }
+                if (p.id === socket.id && index === 0) meIsHost = true;
             });
             startGameBtn.style.display = meIsHost ? 'block' : 'none';
             startGameBtn.disabled = players.length < 2;
         });
+
+        socket.on('error', (message) => alert('Chyba: ' + message));
+
+        // --- HERNÍ LOGIKA ---
+        let gameState = null;
+        let myId = null;
+        const CELL_SIZE = 10;
+        const viewportEl = document.getElementById('game-viewport');
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimap');
+        const minimapCtx = minimapCanvas.getContext('2d');
+
+        function initializeGame(initialState) {
+            gameState = initialState;
+            myId = socket.id;
+            showGame();
+            resizeCanvas();
+            gameLoop();
+        }
+
+        socket.on('gameStarted', initializeGame);
+        socket.on('gameStateUpdate', (updatePacket) => {
+            if (!gameState) return;
+            gameState.players = updatePacket.players;
+            gameState.expeditions = updatePacket.expeditions;
+            updatePacket.boardChanges.forEach(change => {
+                if (gameState.gameBoard[change.y]?.[change.x]) {
+                    gameState.gameBoard[change.y][change.x].ownerId = change.ownerId;
+                }
+            });
+        });
         
-        // JEDINÁ ZPRÁVA, KTERÁ SPOUŠTÍ HRU
-        socket.on('initialGameState', (initialState) => {
-            // Zobrazíme zprávu, uložíme data a okamžitě přesměrujeme
-            document.body.innerHTML = '<h1>Data přijata, přesměrovávám do hry...</h1>';
-            sessionStorage.setItem('initialGameState', JSON.stringify(initialState));
-            window.location.href = `/hra.html?gameCode=${initialState.code}`;
+        let camera = { x: 0, y: 0, scale: 0.5 };
+        function gameLoop() {
+            requestAnimationFrame(gameLoop);
+            if (!gameState) return;
+            ctx.save();
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.translate(camera.x, camera.y);
+            ctx.scale(camera.scale, camera.scale);
+            renderBoard();
+            ctx.restore();
+            renderMinimap();
+            renderUI();
+        }
+        
+        function renderBoard() {
+            const view = { left: -camera.x / camera.scale, top: -camera.y / camera.scale, right: (canvas.width - camera.x) / camera.scale, bottom: (canvas.height - camera.y) / camera.scale };
+            const startX = Math.max(0, Math.floor(view.left / CELL_SIZE));
+            const endX = Math.min(gameState.gridSize, Math.ceil(view.right / CELL_SIZE));
+            const startY = Math.max(0, Math.floor(view.top / CELL_SIZE));
+            const endY = Math.min(gameState.gridSize, Math.ceil(view.bottom / CELL_SIZE));
+            const colorMap = new Map(gameState.players.map(p => [p.id, p.color]));
+            colorMap.set(null, '#282828');
+
+            for (let y = startY; y < endY; y++) {
+                for (let x = startX; x < endX; x++) {
+                    const cell = gameState.gameBoard[y][x];
+                    ctx.fillStyle = colorMap.get(cell.ownerId);
+                    ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                }
+            }
+        }
+
+        function renderMinimap() {
+             const size = gameState.gridSize;
+             const pixelSize = minimapCanvas.width / size;
+             minimapCtx.fillStyle = '#000';
+             minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+             const colorMap = new Map(gameState.players.map(p => [p.id, p.color]));
+
+             for(let y=0; y < size; y++){
+                for(let x=0; x < size; x++){
+                    const ownerId = gameState.gameBoard[y][x].ownerId;
+                    if(ownerId){
+                         minimapCtx.fillStyle = colorMap.get(ownerId);
+                         minimapCtx.fillRect(x * pixelSize, y * pixelSize, 1, 1);
+                    }
+                }
+            }
+        }
+
+        function renderUI() {
+            const me = gameState.players.find(p => p.id === myId);
+            if(me) {
+                document.getElementById('player-name-display').textContent = me.name;
+                document.getElementById('player-name-display').style.color = me.color;
+                document.getElementById('gold-display').textContent = Math.floor(me.gold);
+                document.getElementById('crystals-display').textContent = Math.floor(me.crystals);
+                document.getElementById('units-display').textContent = me.units;
+                document.getElementById('territory-display').textContent = me.territoryCount;
+            }
+        }
+        
+        function resizeCanvas() { canvas.width = viewportEl.clientWidth; canvas.height = viewportEl.clientHeight; }
+        window.addEventListener('resize', resizeCanvas);
+        
+        let isDragging = false, didDrag = false, startPos = { x: 0, y: 0 };
+        canvas.addEventListener('mousedown', (e) => { if (e.button !== 0) return; isDragging = true; didDrag = false; startPos.x = e.clientX - camera.x; startPos.y = e.clientY - camera.y; });
+        canvas.addEventListener('mousemove', (e) => { if (!isDragging) return; didDrag = true; camera.x = e.clientX - startPos.x; camera.y = e.clientY - startPos.y; });
+        canvas.addEventListener('mouseup', () => { isDragging = false; });
+        canvas.addEventListener('wheel', (e) => { 
+            e.preventDefault(); 
+            const mouseX = e.clientX - canvas.getBoundingClientRect().left;
+            const mouseY = e.clientY - canvas.getBoundingClientRect().top;
+            const zoom = Math.pow(1.1, -e.deltaY * 0.01);
+            const newScale = Math.max(0.1, Math.min(camera.scale * zoom, 5.0));
+            camera.x = mouseX - (mouseX - camera.x) * (newScale / camera.scale);
+            camera.y = mouseY - (mouseY - camera.y) * (newScale / camera.scale);
+            camera.scale = newScale;
+        }, { passive: false });
+
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (didDrag) return;
+            const me = gameState.players.find(p => p.id === myId);
+            if(!me) return;
+            
+            const worldX = (e.clientX - canvas.getBoundingClientRect().left - camera.x) / camera.scale;
+            const worldY = (e.clientY - canvas.getBoundingClientRect().top - camera.y) / camera.scale;
+            const targetX = Math.floor(worldX / CELL_SIZE);
+            const targetY = Math.floor(worldY / CELL_SIZE);
+            const unitsToSend = Math.max(1, Math.ceil(me.units * (document.getElementById('expedition-slider').value / 100)));
+
+            socket.emit('launchExpedition', { gameCode: gameState.code, target: { x: targetX, y: targetY }, units: unitsToSend });
         });
 
-        socket.on('error', (message) => {
-            alert('Chyba: ' + message);
-            // V případě chyby obnovíme stránku, aby se hráč dostal zpět do lobby
-            window.location.reload();
-        });
     </script>
 </body>
 </html>
