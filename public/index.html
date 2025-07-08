@@ -1,4 +1,4 @@
-<!-- START OF FILE index.html (Kompletní finální verze) -->
+<!-- START OF FILE index.html (Finální opravená verze) -->
 
 <!DOCTYPE html>
 <html lang="cs">
@@ -13,7 +13,7 @@
         <div class="menu-container">
             <h1>AVALON</h1>
             <h2>Zrození Impéria</h2>
-            <input type="text" id="playerNameInput" placeholder="Jméno tvého rodu..." value="Vojevůdce">
+            <input type="text" id="playerNameInput" placeholder="Jméno tvého rodu...">
             <button id="soloGameBtn">Hra pro jednoho</button>
             <button id="findGameBtn">Najít veřejnou hru</button>
             <button id="createGameBtn">Vytvořit soukromou hru</button>
@@ -52,10 +52,9 @@
 
         <div id="game-container">
             <div id="game-viewport">
-                <canvas id="board-canvas"></canvas>
                 <canvas id="entity-canvas"></canvas>
                 <canvas id="fow-canvas"></canvas>
-                 <div id="build-ghost"></div>
+                <div id="build-ghost"></div>
             </div>
             <div class="right-panel">
                  <div class="selection-panel">
@@ -99,8 +98,6 @@
         let visibilityMap = null;
 
         // --- KANVAS A KONTEXTY ---
-        const boardCanvas = document.getElementById('board-canvas');
-        const boardCtx = boardCanvas.getContext('2d', { alpha: false });
         const entityCanvas = document.getElementById('entity-canvas');
         const entityCtx = entityCanvas.getContext('2d');
         const fowCanvas = document.getElementById('fow-canvas');
@@ -119,27 +116,34 @@
         };
 
         // --- LOBBY LOGIKA ---
-        const setPlayerName = () => socket.emit('setPlayerName', playerNameInput.value.trim() || 'Anonym');
+        const setPlayerName = () => {
+            const name = playerNameInput.value.trim();
+            if (name) {
+                socket.emit('setPlayerName', name);
+                return true;
+            }
+            alert('Zadej prosím jméno svého rodu!');
+            return false;
+        };
 
         document.getElementById('soloGameBtn').addEventListener('click', () => {
-            setPlayerName();
+            if (!setPlayerName()) return;
             socket.emit('createLobby', { isPrivate: true });
             socket.once('lobbyCreated', ({ gameCode }) => {
                 socket.emit('startGame', gameCode);
             });
         });
         document.getElementById('findGameBtn').addEventListener('click', () => {
-            setPlayerName();
+            if (!setPlayerName()) return;
             socket.emit('findPublicLobby');
         });
         document.getElementById('createGameBtn').addEventListener('click', () => {
-            setPlayerName();
+            if (!setPlayerName()) return;
             socket.emit('createLobby', { isPrivate: true });
         });
         document.getElementById('joinGameBtn').addEventListener('click', () => {
             const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
-            if (code) {
-                setPlayerName();
+            if (code && setPlayerName()) {
                 socket.emit('joinLobby', code);
             }
         });
@@ -153,17 +157,18 @@
         socket.on('disconnect', () => { alert("Spojení se serverem Avalon bylo přerušeno."); cancelAnimationFrame(animationFrameId); location.reload(); });
         socket.on('gameError', (error) => { alert(`Chyba: ${error.message}`); });
 
-        socket.on('lobbyCreated', ({ gameCode }) => {
+        socket.on('lobbyCreated', ({ gameCode, hostId }) => {
             gameState = { gameCode };
             document.getElementById('lobby-game-code').textContent = gameCode;
             showScreen('lobby');
+            socket.emit('joinLobby', gameCode); // Auto-join after creating
         });
+
         socket.on('lobbyFound', (gameCode) => {
-            setPlayerName();
-            socket.emit('joinLobby', gameCode);
             gameState = { gameCode };
             document.getElementById('lobby-game-code').textContent = gameCode;
             showScreen('lobby');
+            socket.emit('joinLobby', gameCode);
         });
 
         socket.on('lobbyUpdate', ({ players, hostId }) => {
@@ -183,7 +188,6 @@
 
         // --- HERNÍ LOGIKA ---
         socket.on('gameStarted', (initialPacket) => {
-            console.log("AVALON ZAPOČAL:", initialPacket);
             gameState = {
                 ...initialPacket,
                 players: new Map(initialPacket.players.map(p => [p.id, { ...p, resources: {}, pop: {current:0, cap:0}, techs: new Set() }])),
@@ -192,11 +196,17 @@
                 effects: []
             };
             
+            const myPlayer = gameState.players.get(myId);
+            if(myPlayer) {
+                const startPos = gameState.players.get(myId).startPos;
+                camera.x = -startPos.x * CELL_SIZE * camera.scale + entityCanvas.width / 2;
+                camera.y = -startPos.y * CELL_SIZE * camera.scale + entityCanvas.height / 2;
+            }
+
             visibilityMap = new Uint8Array(gameState.config.GRID_SIZE * gameState.config.GRID_SIZE).fill(FOW_STATE.HIDDEN);
             
             showScreen('game');
             resizeCanvas();
-            renderFullBoard();
             renderFOW();
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             gameLoop();
@@ -254,70 +264,66 @@
             if (!gameState) return;
             
             entityCtx.clearRect(0, 0, entityCanvas.width, entityCanvas.height);
+            
             entityCtx.save();
             entityCtx.translate(camera.x, camera.y);
             entityCtx.scale(camera.scale, camera.scale);
 
+            renderBoard(entityCtx);
             renderEntities(entityCtx);
             renderEffects(entityCtx);
             
             entityCtx.restore();
         }
 
-        function renderFullBoard() {
-            if (!gameState) return;
-            boardCanvas.width = gameState.config.GRID_SIZE * CELL_SIZE;
-            boardCanvas.height = gameState.config.GRID_SIZE * CELL_SIZE;
+        function renderBoard(ctx) {
+            const { GRID_SIZE, TERRAIN } = gameState.config;
+            const startX = Math.floor(-camera.x / (CELL_SIZE * camera.scale));
+            const startY = Math.floor(-camera.y / (CELL_SIZE * camera.scale));
+            const endX = startX + Math.ceil(entityCanvas.width / (CELL_SIZE * camera.scale)) + 1;
+            const endY = startY + Math.ceil(entityCanvas.height / (CELL_SIZE * camera.scale)) + 1;
 
-            boardCtx.fillStyle = '#111';
-            boardCtx.fillRect(0, 0, boardCanvas.width, boardCanvas.height);
-            const { TERRAIN } = gameState.config;
-            
-            for (let y = 0; y < gameState.config.GRID_SIZE; y++) {
-                for (let x = 0; x < gameState.config.GRID_SIZE; x++) {
-                    const type = gameState.board[y][x];
-                    if (TERRAIN[type]) {
-                        boardCtx.fillStyle = TERRAIN[type].color;
-                        boardCtx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-                    }
+            for (let y = Math.max(0, startY); y < Math.min(GRID_SIZE, endY); y++) {
+                for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
+                     const state = visibilityMap[y * GRID_SIZE + x];
+                     if (state === FOW_STATE.VISIBLE || state === FOW_STATE.EXPLORED) {
+                        const type = gameState.board[y][x];
+                        ctx.fillStyle = TERRAIN[type]?.color || '#000';
+                        ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                     }
                 }
             }
-            renderMinimap();
         }
 
         function renderFOW() {
             if (!gameState || !visibilityMap) return;
             fowCtx.clearRect(0, 0, fowCanvas.width, fowCanvas.height);
             
-            const startX = Math.floor(-camera.x / camera.scale);
-            const startY = Math.floor(-camera.y / camera.scale);
-            const viewWidth = fowCanvas.width / camera.scale;
-            const viewHeight = fowCanvas.height / camera.scale;
-
             fowCtx.save();
             fowCtx.translate(camera.x, camera.y);
             fowCtx.scale(camera.scale, camera.scale);
 
-            // This is an off-screen canvas for the full FoW map
-            const fowMapCanvas = document.createElement('canvas');
-            fowMapCanvas.width = gameState.config.GRID_SIZE * CELL_SIZE;
-            fowMapCanvas.height = gameState.config.GRID_SIZE * CELL_SIZE;
-            const fowMapCtx = fowMapCanvas.getContext('2d');
-
+            const GRID_SIZE = gameState.config.GRID_SIZE;
             const exploredColor = "rgba(0, 0, 0, 0.5)";
             const hiddenColor = "black";
-            const gridSize = gameState.config.GRID_SIZE;
-
-            for (let i = 0; i < visibilityMap.length; i++) {
-                const state = visibilityMap[i];
-                if (state !== FOW_STATE.VISIBLE) {
-                    const x = (i % gridSize) * CELL_SIZE;
-                    const y = Math.floor(i / gridSize) * CELL_SIZE;
-                    fowMapCtx.fillStyle = state === FOW_STATE.EXPLORED ? exploredColor : hiddenColor;
-                    fowMapCtx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+            
+            const startX = Math.floor(-camera.x / (CELL_SIZE * camera.scale));
+            const startY = Math.floor(-camera.y / (CELL_SIZE * camera.scale));
+            const endX = startX + Math.ceil(fowCanvas.width / (CELL_SIZE * camera.scale)) + 1;
+            const endY = startY + Math.ceil(fowCanvas.height / (CELL_SIZE * camera.scale)) + 1;
+            
+            for (let y = Math.max(0, startY); y < Math.min(GRID_SIZE, endY); y++) {
+                for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
+                     const state = visibilityMap[y * GRID_SIZE + x];
+                     if (state === FOW_STATE.EXPLORED) {
+                        fowCtx.fillStyle = exploredColor;
+                        fowCtx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                     } else if (state === FOW_STATE.HIDDEN) {
+                        fowCtx.fillStyle = hiddenColor;
+                        fowCtx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                     }
                 }
             }
-            fowCtx.drawImage(fowMapCanvas, 0, 0);
             fowCtx.restore();
         }
         
@@ -490,8 +496,8 @@
         // --- OVLÁDÁNÍ A VSTUPY ---
         function getMouseWorldPos(e) {
             const rect = entityCanvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) / camera.scale - (camera.x / camera.scale);
-            const y = (e.clientY - rect.top) / camera.scale - (camera.y / camera.scale);
+            const x = (e.clientX - rect.left - camera.x) / camera.scale;
+            const y = (e.clientY - rect.top - camera.y) / camera.scale;
             return { x: x / CELL_SIZE, y: y / CELL_SIZE };
         }
 
@@ -565,7 +571,7 @@
         });
         
         let isDragging = false, dragStartPos = { x: 0, y: 0 };
-        entityCanvas.addEventListener('mousedown', (e) => { if(e.button === 1 || (e.button === 0 && e.altKey)) { isDragging = true; dragStartPos = { x: e.clientX - camera.x, y: e.clientY - camera.y }; } });
+        entityCanvas.addEventListener('mousedown', (e) => { if(e.button === 1) { isDragging = true; dragStartPos = { x: e.clientX - camera.x, y: e.clientY - camera.y }; } });
         entityCanvas.addEventListener('mousemove', (e) => {
             const worldPos = getMouseWorldPos(e);
             if (isDragging) {
@@ -613,12 +619,12 @@
             minimapCanvas.width = minimapPanel.clientWidth - 30;
             minimapCanvas.height = minimapCanvas.width;
             if(gameState) {
-                renderFullBoard();
                 renderFOW();
+                renderMinimap();
             }
         }
         window.addEventListener('resize', resizeCanvas);
     </script>
 </body>
 </html>
-<!-- END OF FILE index.html (Kompletní finální verze) -->
+<!-- END OF FILE index.html (Finální opravená verze) -->

@@ -1,4 +1,4 @@
-// --- START OF FILE server.js (Kompletní finální verze) ---
+// --- START OF FILE server.js (Finální opravená verze) ---
 
 const http = require('http');
 const express = require('express');
@@ -101,7 +101,7 @@ function updateVisibility(game) {
         };
 
         Object.values(player.units).forEach(u => reveal(u.x, u.y, GAME_CONFIG.UNITS[u.type].vision));
-        Object.values(game.buildings).filter(b => b.ownerId === player.id && b.buildProgress === 1).forEach(b => reveal(b.x, b.y, GAME_CONFIG.BUILDINGS[b.type].vision));
+        Object.values(game.buildings).filter(b => b.ownerId === player.id && b.buildProgress === 1).forEach(b => reveal(b.x + 1.5, b.y + 1.5, GAME_CONFIG.BUILDINGS[b.type].vision));
 
         if (dirtyCells.length > 0) {
             game.dirtyData.visibilityChanges[player.id] = (game.dirtyData.visibilityChanges[player.id] || []).concat(dirtyCells);
@@ -165,7 +165,7 @@ function createPlayerUpdatePacket(game, playerId) {
 
     dirty.players.forEach(id => {
         const p = game.players.find(pl => pl.id === id);
-        if (p && id === playerId) { // Send detailed data only to the owner
+        if (p && id === playerId) {
             packet.players.push({
                 id: p.id,
                 resources: p.resources,
@@ -285,8 +285,9 @@ function updateUnitMovement(game, deltaTime) {
         const gridX = Math.floor(u.x);
         const gridY = Math.floor(u.y);
         const terrainType = game.board[gridY]?.[gridX] || 'PLAINS';
+        const unitConf = GAME_CONFIG.UNITS[u.type];
         const speedModifier = 1 / (GAME_CONFIG.TERRAIN[terrainType]?.movement_cost || 1);
-        const speed = GAME_CONFIG.UNITS[u.type].speed * speedModifier;
+        const speed = unitConf.speed * speedModifier;
 
         u.x += (dx / dist) * speed * deltaTime;
         u.y += (dy / dist) * speed * deltaTime;
@@ -300,13 +301,14 @@ function updateCombat(game, deltaTime) {
 
     allUnits.forEach(u => {
         if (deadUnits.has(u.id)) return;
+        const u_conf = GAME_CONFIG.UNITS[u.type];
         if (u.attackCooldown > 0) u.attackCooldown -= deltaTime;
 
         let target = u.targetUnitId ? game.units[u.targetUnitId] : null;
         if (!target || deadUnits.has(target.id)) {
             u.targetUnitId = null;
             let closestEnemy = null;
-            let min_dist_sq = (GAME_CONFIG.UNITS[u.type].vision)**2;
+            let min_dist_sq = (u_conf.vision)**2;
             allUnits.forEach(potentialTarget => {
                 if (potentialTarget.ownerId !== u.ownerId && !deadUnits.has(potentialTarget.id)) {
                     const dist_sq = (u.x - potentialTarget.x)**2 + (u.y - potentialTarget.y)**2;
@@ -322,13 +324,11 @@ function updateCombat(game, deltaTime) {
         
         if (target) {
             const distSq = (u.x - target.x)**2 + (u.y - target.y)**2;
-            const unitRange = GAME_CONFIG.UNITS[u.type].range;
-            if (distSq <= unitRange**2) {
+            if (distSq <= u_conf.range**2) {
                 u.moveTarget = null;
                 if (u.attackCooldown <= 0) {
-                    const u_conf = GAME_CONFIG.UNITS[u.type];
                     const t_conf = GAME_CONFIG.UNITS[target.type];
-                    const modifier = GAME_CONFIG.RPS_MODIFIERS[u_conf.name]?.[t_conf.name] || 1;
+                    const modifier = GAME_CONFIG.RPS_MODIFIERS[u.type]?.[target.type] || 1;
                     const damage = u_conf.attack * modifier;
                     target.hp -= damage;
                     
@@ -350,10 +350,12 @@ function updateCombat(game, deltaTime) {
             const deadUnit = game.units[deadId];
             if (deadUnit) {
                 const owner = game.players.find(p => p.id === deadUnit.ownerId);
-                delete owner.units[deadId];
+                if (owner) {
+                    delete owner.units[deadId];
+                    calculatePlayerPop(owner);
+                    game.dirtyData.players.add(owner.id);
+                }
                 delete game.units[deadId];
-                calculatePlayerPop(owner);
-                game.dirtyData.players.add(owner.id);
             }
         });
         game.dirtyData.events.push({ type: 'UNITS_DIED', ids: Array.from(deadUnits) });
@@ -503,11 +505,11 @@ function initializeGame(game) {
             buildProgress: 1, buildTime: 0, trainingQueue: [], rallyPoint: {x:pos.x+3, y:pos.y+3}
         };
         game.buildings[base.id] = base;
-        calculatePlayerPopCap(player, game);
         
         createUnit(game, player, 'STAVITEL', {x: pos.x + 3, y: pos.y});
         createUnit(game, player, 'PECHOTA', {x: pos.x - 3, y: pos.y});
         createUnit(game, player, 'PECHOTA', {x: pos.x, y: pos.y + 3});
+        calculatePlayerPopCap(player, game);
         calculatePlayerPop(player);
     });
 
@@ -524,7 +526,6 @@ function initializeGame(game) {
 
 // --- SOCKET.IO HANDLERY ---
 io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
     socket.playerInfo = { id: socket.id, name: 'Anonym' };
 
     const leaveLobby = (gameCode) => {
@@ -534,6 +535,7 @@ io.on('connection', (socket) => {
         game.sockets = game.sockets.filter(s => s.id !== socket.id);
         game.players = game.players.filter(p => p.id !== socket.id);
         if (game.players.length === 0 && game.status === 'lobby') {
+            console.log(`Lobby ${gameCode} is empty, deleting.`);
             delete games[gameCode];
         } else {
             io.to(gameCode).emit('lobbyUpdate', { players: game.players, hostId: game.hostId });
@@ -544,6 +546,7 @@ io.on('connection', (socket) => {
 
     socket.on('createLobby', ({ isPrivate }) => {
         const gameCode = createId();
+        console.log(`Player ${socket.playerInfo.name} (${socket.id}) creating ${isPrivate ? 'private' : 'public'} lobby: ${gameCode}`);
         const game = {
             code: gameCode, status: 'lobby', isPrivate: isPrivate,
             sockets: [socket], players: [socket.playerInfo], hostId: socket.id,
@@ -553,15 +556,16 @@ io.on('connection', (socket) => {
         socket.join(gameCode);
         socket.gameCode = gameCode;
         socket.emit('lobbyCreated', { gameCode, hostId: socket.id });
-        io.to(gameCode).emit('lobbyUpdate', { players: game.players, hostId: game.hostId });
     });
 
     socket.on('joinLobby', (gameCode) => {
         const game = games[gameCode];
         if (game && game.status === 'lobby') {
+            if (game.players.some(p => p.id === socket.id)) return; // Already in lobby
             if (game.players.length >= GAME_CONFIG.PLAYER_COLORS.length) {
                 return socket.emit('gameError', { message: 'Lobby je plné.' });
             }
+            console.log(`Player ${socket.playerInfo.name} (${socket.id}) joining lobby: ${gameCode}`);
             socket.join(gameCode);
             socket.gameCode = gameCode;
             game.sockets.push(socket);
@@ -573,11 +577,23 @@ io.on('connection', (socket) => {
     });
 
     socket.on('findPublicLobby', () => {
-        let lobby = Object.values(games).find(g => !g.isPrivate && g.status === 'lobby' && g.players.length < GAME_CONFIG.PLAYER_COLORS.length);
-        if (lobby) {
-            socket.emit('lobbyFound', lobby.code);
+        let availableLobby = Object.values(games).find(g => !g.isPrivate && g.status === 'lobby' && g.players.length < GAME_CONFIG.PLAYER_COLORS.length);
+        
+        if (availableLobby) {
+            console.log(`Found public lobby ${availableLobby.code} for ${socket.playerInfo.name}`);
+            socket.emit('lobbyFound', availableLobby.code);
         } else {
-            socket.emit('createLobby', { isPrivate: false });
+            console.log(`No public lobby found, creating one for ${socket.playerInfo.name}`);
+            const gameCode = createId();
+            const game = {
+                code: gameCode, status: 'lobby', isPrivate: false,
+                sockets: [socket], players: [socket.playerInfo], hostId: socket.id,
+                gameInterval: null
+            };
+            games[gameCode] = game;
+            socket.join(gameCode);
+            socket.gameCode = gameCode;
+            socket.emit('lobbyCreated', { gameCode, hostId: socket.id });
         }
     });
     
@@ -610,4 +626,4 @@ io.on('connection', (socket) => {
 app.use(express.static(path.join(__dirname, 'public')));
 server.listen(PORT, () => console.log(`Server Avalon běží na portu ${PORT}`));
 
-// --- END OF FILE server.js (Kompletní finální verze) ---
+// --- END OF FILE server.js (Finální opravená verze) ---
