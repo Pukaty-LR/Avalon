@@ -61,6 +61,7 @@ function initializeGame(game) {
         }
     });
 
+    // Pošleme počáteční stav VŠEM hráčům (jen jednou)
     io.to(game.code).emit('initialGameState', sanitizeGameState(game, true));
     game.boardChanges = [];
 
@@ -153,6 +154,7 @@ io.on('connection', (socket) => {
     players[socket.id] = { id: socket.id };
 
     socket.on('playerEnteredLobby', (name) => { players[socket.id].name = name; });
+
     socket.on('createGame', () => {
         const currentPlayer = players[socket.id];
         const gameCode = generateGameCode();
@@ -162,6 +164,7 @@ io.on('connection', (socket) => {
         socket.emit('gameCreated', gameCode);
         io.to(gameCode).emit('updatePlayerList', games[gameCode].players);
     });
+
     socket.on('findGame', () => {
         const currentPlayer = players[socket.id];
         let availableGame = Object.values(games).find(g => g.status === 'waiting' && g.players.length < 4);
@@ -180,6 +183,7 @@ io.on('connection', (socket) => {
             io.to(gameCode).emit('updatePlayerList', games[gameCode].players);
         }
     });
+
     socket.on('joinGame', (gameCode) => {
         const currentPlayer = players[socket.id];
         const game = games[gameCode];
@@ -190,14 +194,15 @@ io.on('connection', (socket) => {
         socket.emit('joinSuccess', gameCode);
         io.to(gameCode).emit('updatePlayerList', game.players);
     });
+
     socket.on('startGame', () => {
         const currentPlayer = players[socket.id];
         const gameCode = currentPlayer.gameCode;
         if (games[gameCode] && games[gameCode].hostId === socket.id) {
-            io.to(gameCode).emit('gameStarting');
             initializeGame(games[gameCode]);
         }
     });
+
     socket.on('launchExpedition', ({ gameCode, target, units }) => {
         const game = games[gameCode];
         const player = game?.players.find(p => p.id === socket.id);
@@ -207,6 +212,7 @@ io.on('connection', (socket) => {
         player.updated = true;
         game.expeditions.push({ id: `exp_${Date.now()}`, ownerId: socket.id, unitsLeft: units, currentX: myBase.x + myBase.w/2, currentY: myBase.y + myBase.h/2, targetX: target.x, targetY: target.y });
     });
+
     socket.on('buyUnit', ({gameCode}) => {
         const game = games[gameCode];
         const player = game?.players.find(p => p.id === socket.id);
@@ -215,6 +221,7 @@ io.on('connection', (socket) => {
         player.units++;
         player.updated = true;
     });
+
     socket.on('disconnect', () => {
         console.log(`Hráč odpojen: ${socket.id}`);
         const currentPlayer = players[socket.id];
