@@ -1,5 +1,4 @@
-<!-- START OF FILE index.html (Absolutní finální verze) -->
-
+<!-- START OF FILE index.html (Konečná verze s reworkem) -->
 <!DOCTYPE html>
 <html lang="cs">
 <head>
@@ -22,17 +21,15 @@
             </div>
         </div>
     </div>
-    
     <div id="lobby-section" class="screen" style="display: none;">
          <div class="lobby-container">
             <h3>Čeká se na velitele...</h3>
             <h4>Kód hry: <span id="lobby-game-code"></span></h4>
             <ul id="playerList"></ul>
             <button id="startGameBtn" style="display:none;">Spustit Válku</button>
-            <p id="waiting-message">Čekání na hosta, aby spustil hru...</p>
+            <p id="waiting-message"></p>
         </div>
     </div>
-
     <div id="game-section" style="display: none;">
         <div class="top-bar">
             <div class="resource-panel">
@@ -40,18 +37,17 @@
                 <div class="resource" title="Jídlo">🍖 <span id="food-display">0</span></div>
                 <div class="resource" title="Dřevo">🌲 <span id="wood-display">0</span></div>
                 <div class="resource" title="Kámen">⛏️ <span id="stone-display">0</span></div>
-                <div class="resource" title="Věda">📚 <span id="science-display">0</span></div>
             </div>
              <div class="resource-panel">
                 <div class="resource" title="Populace / Limit">🧑‍🤝‍🧑 <span id="pop-display">0/0</span></div>
              </div>
         </div>
-
         <div id="game-container">
             <div id="game-viewport">
                 <canvas id="entity-canvas"></canvas>
                 <canvas id="fow-canvas"></canvas>
                 <div id="build-ghost"></div>
+                <div id="selection-box"></div>
             </div>
             <div class="right-panel">
                  <div class="selection-panel">
@@ -63,41 +59,24 @@
                     <h4>Mapa Vlivu</h4>
                     <canvas id="minimap"></canvas>
                 </div>
-                <div class="global-actions-panel">
-                     <h4>Technologie</h4>
-                     <div id="tech-tree">
-                        <button class="action-button tech-button" data-tech="vylepsene_zemedelstvi" title="Vylepšené zemědělství (50 Věda)">Farma+ (50)</button>
-                        <button class="action-button tech-button" data-tech="kovarstvi" title="Kovářství (100 Věda)">Meč+ (100)</button>
-                        <button class="action-button tech-button" data-tech="opevneni" title="Opevnění (75 Věda)">Hradby+ (75)</button>
-                     </div>
-                </div>
             </div>
         </div>
     </div>
-
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-
-        let gameState = null;
-        let myId = null;
-        let animationFrameId = null;
+        let gameState = null, myId = null, animationFrameId = null;
         let camera = { x: 0, y: 0, scale: 0.5 };
         const CELL_SIZE = 12;
-        let selectedUnits = new Set();
-        let selectedBuilding = null;
-        let placingBuildingType = null;
+        let selectedUnits = new Set(), selectedBuilding = null, placingBuildingType = null;
         const FOW_STATE = { HIDDEN: 0, EXPLORED: 1, VISIBLE: 2 };
         let visibilityMap = null;
-
-        const entityCanvas = document.getElementById('entity-canvas');
-        const entityCtx = entityCanvas.getContext('2d');
-        const fowCanvas = document.getElementById('fow-canvas');
-        const fowCtx = fowCanvas.getContext('2d');
-        const minimapCanvas = document.getElementById('minimap');
-        const minimapCtx = minimapCanvas.getContext('2d');
+        const entityCanvas = document.getElementById('entity-canvas'), entityCtx = entityCanvas.getContext('2d');
+        const fowCanvas = document.getElementById('fow-canvas'), fowCtx = fowCanvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimap'), minimapCtx = minimapCanvas.getContext('2d');
         const playerNameInput = document.getElementById('playerNameInput');
         const buildGhost = document.getElementById('build-ghost');
+        const selectionBox = document.getElementById('selection-box');
         
         const showScreen = (screenName) => {
             document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
@@ -126,9 +105,7 @@
             }
         });
         document.getElementById('startGameBtn').addEventListener('click', () => {
-            if (gameState && gameState.gameCode) {
-                socket.emit('startGame', gameState.gameCode);
-            }
+            if (gameState && gameState.gameCode) socket.emit('startGame', gameState.gameCode);
         });
 
         socket.on('connect', () => { myId = socket.id; showScreen('main-menu'); });
@@ -150,7 +127,6 @@
             }
             showScreen('lobby');
         };
-        socket.on('lobbyJoined', updateLobbyView);
         socket.on('lobbyUpdate', updateLobbyView);
 
         socket.on('gameStarted', (initialPacket) => {
@@ -226,14 +202,11 @@
 
         function renderBoard(ctx) {
             const { GRID_SIZE, TERRAIN } = gameState.config;
-            const startX = Math.floor(-camera.x / (CELL_SIZE * camera.scale));
-            const startY = Math.floor(-camera.y / (CELL_SIZE * camera.scale));
-            const endX = startX + Math.ceil(entityCanvas.width / (CELL_SIZE * camera.scale)) + 1;
-            const endY = startY + Math.ceil(entityCanvas.height / (CELL_SIZE * camera.scale)) + 1;
-            for (let y = Math.max(0, startY); y < Math.min(GRID_SIZE, endY); y++) {
-                for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
-                     const state = visibilityMap[y * GRID_SIZE + x];
-                     if (state === FOW_STATE.VISIBLE || state === FOW_STATE.EXPLORED) {
+            const sX = Math.floor(-camera.x / (CELL_SIZE * camera.scale)), eX = sX + Math.ceil(entityCanvas.width / (CELL_SIZE * camera.scale)) + 1;
+            const sY = Math.floor(-camera.y / (CELL_SIZE * camera.scale)), eY = sY + Math.ceil(entityCanvas.height / (CELL_SIZE * camera.scale)) + 1;
+            for (let y = Math.max(0, sY); y < Math.min(GRID_SIZE, eY); y++) {
+                for (let x = Math.max(0, sX); x < Math.min(GRID_SIZE, eX); x++) {
+                     if (visibilityMap[y * GRID_SIZE + x] !== FOW_STATE.HIDDEN) {
                         ctx.fillStyle = TERRAIN[gameState.board[y][x]]?.color || '#000';
                         ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
                      }
@@ -248,12 +221,10 @@
             fowCtx.translate(camera.x, camera.y);
             fowCtx.scale(camera.scale, camera.scale);
             const { GRID_SIZE } = gameState.config;
-            const startX = Math.floor(-camera.x / (CELL_SIZE * camera.scale));
-            const startY = Math.floor(-camera.y / (CELL_SIZE * camera.scale));
-            const endX = startX + Math.ceil(fowCanvas.width / (CELL_SIZE * camera.scale)) + 1;
-            const endY = startY + Math.ceil(fowCanvas.height / (CELL_SIZE * camera.scale)) + 1;
-            for (let y = Math.max(0, startY); y < Math.min(GRID_SIZE, endY); y++) {
-                for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
+            const sX = Math.floor(-camera.x / (CELL_SIZE * camera.scale)), eX = sX + Math.ceil(fowCanvas.width / (CELL_SIZE * camera.scale)) + 1;
+            const sY = Math.floor(-camera.y / (CELL_SIZE * camera.scale)), eY = sY + Math.ceil(fowCanvas.height / (CELL_SIZE * camera.scale)) + 1;
+            for (let y = Math.max(0, sY); y < Math.min(GRID_SIZE, eY); y++) {
+                for (let x = Math.max(0, sX); x < Math.min(GRID_SIZE, eX); x++) {
                      const state = visibilityMap[y * GRID_SIZE + x];
                      if (state === FOW_STATE.EXPLORED) {
                         fowCtx.fillStyle = "rgba(0, 0, 0, 0.5)";
@@ -285,18 +256,18 @@
                 const pColor = gameState.players.get(u.ownerId)?.color || 'grey';
                 ctx.fillStyle = pColor;
                 ctx.beginPath();
-                ctx.arc(u.x * CELL_SIZE, u.y * CELL_SIZE, CELL_SIZE * 0.7, 0, 2 * Math.PI);
-                ctx.fill();
-                if (u.type === "LUCISTNIK") {
-                    ctx.fillStyle = "white";
-                    ctx.fillRect(u.x * CELL_SIZE - 2/camera.scale, u.y * CELL_SIZE - 2 / camera.scale, 4 / camera.scale, 4 / camera.scale);
+                if (u.type === "STAVITEL") {
+                    ctx.rect(u.x * CELL_SIZE - (CELL_SIZE * 0.5), u.y * CELL_SIZE - (CELL_SIZE * 0.5), CELL_SIZE, CELL_SIZE);
+                } else {
+                    ctx.arc(u.x * CELL_SIZE, u.y * CELL_SIZE, CELL_SIZE * 0.7, 0, 2 * Math.PI);
                 }
+                ctx.fill();
                 if (selectedUnits.has(u.id)) {
                      ctx.strokeStyle = 'white';
                      ctx.lineWidth = 2 / camera.scale;
                      ctx.stroke();
                 }
-                 if (u.hp < u.maxHp) drawHealthBar(ctx, u.x * CELL_SIZE - CELL_SIZE, (u.y - 1) * CELL_SIZE, 2 * CELL_SIZE, 3 / camera.scale, u.hp / u.maxHp);
+                if (u.hp < u.maxHp) drawHealthBar(ctx, u.x * CELL_SIZE - CELL_SIZE, (u.y - 1.2) * CELL_SIZE, 2 * CELL_SIZE, 3 / camera.scale, u.hp / u.maxHp);
             });
         }
         
@@ -306,42 +277,30 @@
                 e.duration -= 1/60;
                 if (e.duration <= 0) return false;
                 ctx.globalAlpha = e.duration / e.maxDuration;
-                if (e.unitType === 'LUCISTNIK') {
-                    ctx.strokeStyle = 'yellow';
-                    ctx.beginPath();
-                    ctx.moveTo(e.from.x * CELL_SIZE, e.from.y * CELL_SIZE);
-                    ctx.lineTo(e.to.x * CELL_SIZE, e.to.y * CELL_SIZE);
-                    ctx.stroke();
-                } else {
-                    ctx.strokeStyle = 'red';
-                    ctx.beginPath();
-                    ctx.arc(e.to.x * CELL_SIZE, e.to.y * CELL_SIZE, CELL_SIZE * 0.5, 0, Math.PI * 2);
-                    ctx.stroke();
-                }
+                ctx.strokeStyle = e.unitType === 'VEZ' ? '#ff8a80' : 'yellow';
+                ctx.beginPath();
+                ctx.moveTo(e.from.x * CELL_SIZE, e.from.y * CELL_SIZE);
+                ctx.lineTo(e.to.x * CELL_SIZE, e.to.y * CELL_SIZE);
+                ctx.stroke();
                 return true;
             });
             ctx.globalAlpha = 1.0;
         }
 
-        function drawHealthBar(ctx, x, y, width, height, progress) {
-            ctx.fillStyle = '#c0392b';
-            ctx.fillRect(x, y, width, height);
-            ctx.fillStyle = '#27ae60';
-            ctx.fillRect(x, y, width * progress, height);
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 0.5 / camera.scale;
-            ctx.strokeRect(x, y, width, height);
+        function drawHealthBar(ctx, x, y, w, h, p) {
+            ctx.fillStyle = '#c0392b'; ctx.fillRect(x, y, w, h);
+            ctx.fillStyle = '#27ae60'; ctx.fillRect(x, y, w * p, h);
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 0.5 / camera.scale; ctx.strokeRect(x, y, w, h);
         }
         
         function renderMinimap() {
             if (!gameState || !visibilityMap) return;
-            const size = gameState.config.GRID_SIZE;
-            const pixelSize = minimapCanvas.width / size;
+            const size = gameState.config.GRID_SIZE, pixelSize = minimapCanvas.width / size;
             minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
             for(let y = 0; y < size; y++) {
                 for(let x = 0; x < size; x++) {
                     const state = visibilityMap[y * size + x];
-                    if (state === FOW_STATE.VISIBLE || state === FOW_STATE.EXPLORED) {
+                    if (state !== FOW_STATE.HIDDEN) {
                         minimapCtx.fillStyle = gameState.config.TERRAIN[gameState.board[y][x]]?.color || 'black';
                         if (state === FOW_STATE.EXPLORED) minimapCtx.globalAlpha = 0.5;
                         minimapCtx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
@@ -354,7 +313,7 @@
                 gameState.units.forEach(u => {
                     if (u.ownerId === p.id) minimapCtx.fillRect(u.x * pixelSize, u.y * pixelSize, pixelSize, pixelSize);
                 });
-                 gameState.buildings.forEach(b => {
+                gameState.buildings.forEach(b => {
                     if (b.ownerId === p.id) minimapCtx.fillRect(b.x * pixelSize, b.y * pixelSize, pixelSize * 2, pixelSize * 2);
                 });
             });
@@ -367,20 +326,15 @@
                 document.getElementById('food-display').textContent = Math.floor(me.resources.food);
                 document.getElementById('wood-display').textContent = Math.floor(me.resources.wood);
                 document.getElementById('stone-display').textContent = Math.floor(me.resources.stone);
-                document.getElementById('science-display').textContent = Math.floor(me.resources.science);
                 document.getElementById('pop-display').textContent = `${me.pop?.current || 0}/${me.pop?.cap || 0}`;
             }
         }
         
         function updateSelectionPanel() {
-            const nameEl = document.getElementById('selection-name');
-            const detailsEl = document.getElementById('selection-details');
-            const actionsEl = document.getElementById('selection-actions');
-            detailsEl.innerHTML = '';
-            actionsEl.innerHTML = '';
+            const nameEl = document.getElementById('selection-name'), detailsEl = document.getElementById('selection-details'), actionsEl = document.getElementById('selection-actions');
+            detailsEl.innerHTML = ''; actionsEl.innerHTML = '';
             if (selectedBuilding && gameState.buildings.has(selectedBuilding)) {
-                const b = gameState.buildings.get(selectedBuilding);
-                const b_conf = gameState.config.BUILDINGS[b.type];
+                const b = gameState.buildings.get(selectedBuilding), b_conf = gameState.config.BUILDINGS[b.type];
                 nameEl.textContent = b_conf.name;
                 detailsEl.innerHTML = `<p>HP: ${Math.ceil(b.hp)} / ${b.maxHp}</p>`;
                 if (b_conf.trains) {
@@ -389,31 +343,25 @@
                         actionsEl.innerHTML += `<button class="action-button" data-action="train" data-unit="${unitType}">${u_conf.name}</button>`;
                     });
                 }
-                 if(b.trainingQueue?.length > 0) {
-                    detailsEl.innerHTML += '<h4>Fronta:</h4>' + b.trainingQueue.map(item => `<div>${gameState.config.UNITS[item.unitType].name} (${Math.floor(item.progress*100)}%)</div>`).join('');
-                }
+                 if(b.trainingQueue?.length > 0) detailsEl.innerHTML += '<h4>Fronta:</h4>' + b.trainingQueue.map(item => `<div>${gameState.config.UNITS[item.unitType].name} (${Math.floor(item.progress*100)}%)</div>`).join('');
             } else if (selectedUnits.size > 0) {
                  if (selectedUnits.size === 1) {
-                    const unitId = selectedUnits.values().next().value;
-                    if(gameState.units.has(unitId)) {
-                        const unit = gameState.units.get(unitId);
+                    const unit = gameState.units.get(selectedUnits.values().next().value);
+                    if (unit) {
                         const u_conf = gameState.config.UNITS[unit.type];
                         nameEl.textContent = u_conf.name;
                         detailsEl.innerHTML = `<p>HP: ${Math.ceil(unit.hp)} / ${unit.maxHp}</p>`;
                         if (unit.can_build) {
-                           Object.entries(gameState.config.BUILDINGS).forEach(([key, conf]) => {
-                               if(conf.cost.wood || conf.cost.gold) {
-                                   actionsEl.innerHTML += `<button class="action-button build-button" data-structure="${key}">${conf.name}</button>`;
-                               }
+                           ['DUM', 'FARMA', 'PILA', 'DUL', 'VEZ', 'KASARNY', 'STRELNICE', 'STAJE'].forEach(key => {
+                               const conf = gameState.config.BUILDINGS[key];
+                               actionsEl.innerHTML += `<button class="action-button build-button" data-structure="${key}" title="${Object.entries(conf.cost).map(([k,v]) => `${v} ${k}`).join(', ')}">${conf.name}</button>`;
                            });
                         }
                     } else { selectedUnits.clear(); updateSelectionPanel(); }
                  } else {
                      nameEl.textContent = `${selectedUnits.size} jednotek`;
                  }
-            } else {
-                nameEl.textContent = 'Nic nevybráno';
-            }
+            } else { nameEl.textContent = 'Nic nevybráno'; }
         }
 
         function getMouseWorldPos(e) {
@@ -423,69 +371,40 @@
             return { x: x / CELL_SIZE, y: y / CELL_SIZE };
         }
 
+        let isDragging = false, dragStartPos = {x: 0, y: 0}, selectionStartPos = {x: 0, y: 0};
         entityCanvas.addEventListener('mousedown', (e) => {
-            const worldPos = getMouseWorldPos(e);
-            if (e.button === 0) {
-                if (placingBuildingType) {
-                    const builderId = Array.from(selectedUnits).find(id => gameState.units.get(id)?.can_build);
-                    if(builderId) {
-                        socket.emit('playerAction', { type: 'BUILD_STRUCTURE', payload: { builderId, structureType: placingBuildingType, position: {x: Math.floor(worldPos.x), y: Math.floor(worldPos.y) } } });
-                    }
-                    placingBuildingType = null;
-                    buildGhost.style.display = 'none';
-                    entityCanvas.style.cursor = 'default';
-                    return;
-                }
-                selectedUnits.clear();
-                selectedBuilding = null;
-                let foundBuilding = null;
-                gameState.buildings.forEach(b => {
-                    if (worldPos.x >= b.x && worldPos.x <= b.x + 3 && worldPos.y >= b.y && worldPos.y <= b.y + 3) foundBuilding = b;
-                });
-                if(foundBuilding) {
-                    if (foundBuilding.ownerId === myId) selectedBuilding = foundBuilding.id;
-                } else {
-                    let closestUnit = null, minDistSq = 1;
-                    gameState.units.forEach(u => {
-                        const distSq = (u.x - worldPos.x)**2 + (u.y - worldPos.y)**2;
-                        if (distSq < minDistSq) { closestUnit = u; minDistSq = distSq; }
-                    });
-                    if (closestUnit && closestUnit.ownerId === myId) selectedUnits.add(closestUnit.id);
-                }
-                updateSelectionPanel();
-            }
-        });
+            if (e.button === 1) { isDragging = true; dragStartPos = { x: e.clientX - camera.x, y: e.clientY - camera.y }; return; }
+            if (e.button !== 0) return;
 
-        entityCanvas.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
+            selectionStartPos = { x: e.clientX, y: e.clientY };
             if (placingBuildingType) {
-                placingBuildingType = null;
-                buildGhost.style.display = 'none';
-                entityCanvas.style.cursor = 'default';
+                const worldPos = getMouseWorldPos(e);
+                const builderId = Array.from(selectedUnits).find(id => gameState.units.get(id)?.can_build);
+                if(builderId) socket.emit('playerAction', { type: 'BUILD_STRUCTURE', payload: { builderId, structureType: placingBuildingType, position: {x: Math.floor(worldPos.x), y: Math.floor(worldPos.y) } } });
+                placingBuildingType = null; buildGhost.style.display = 'none'; entityCanvas.style.cursor = 'default';
                 return;
             }
-            if (selectedUnits.size === 0) return;
-            const targetPos = getMouseWorldPos(e);
-            let targetUnit = null;
-            gameState.units.forEach(u => {
-                if(u.ownerId !== myId) {
-                    if((u.x - targetPos.x)**2 + (u.y - targetPos.y)**2 < 1) targetUnit = u;
-                }
-            });
-            if (targetUnit) {
-                socket.emit('playerAction', { type: 'ATTACK_TARGET', payload: { unitIds: Array.from(selectedUnits), targetId: targetUnit.id } });
-            } else {
-                socket.emit('playerAction', { type: 'MOVE_UNITS', payload: { unitIds: Array.from(selectedUnits), target: targetPos } });
-            }
+            selectionBox.style.left = `${selectionStartPos.x}px`;
+            selectionBox.style.top = `${selectionStartPos.y}px`;
+            selectionBox.style.width = '0px';
+            selectionBox.style.height = '0px';
+            selectionBox.style.display = 'block';
         });
-        
-        let isDragging = false, dragStartPos = { x: 0, y: 0 };
-        entityCanvas.addEventListener('mousedown', (e) => { if(e.button === 1) { isDragging = true; dragStartPos = { x: e.clientX - camera.x, y: e.clientY - camera.y }; } });
+
         entityCanvas.addEventListener('mousemove', (e) => {
             if (isDragging) {
                 camera.x = e.clientX - dragStartPos.x;
                 camera.y = e.clientY - dragStartPos.y;
                 renderFOW();
+            } else if (selectionBox.style.display === 'block') {
+                const x = Math.min(e.clientX, selectionStartPos.x);
+                const y = Math.min(e.clientY, selectionStartPos.y);
+                const width = Math.abs(e.clientX - selectionStartPos.x);
+                const height = Math.abs(e.clientY - selectionStartPos.y);
+                selectionBox.style.left = `${x}px`;
+                selectionBox.style.top = `${y}px`;
+                selectionBox.style.width = `${width}px`;
+                selectionBox.style.height = `${height}px`;
             }
              if(placingBuildingType) {
                 const worldPos = getMouseWorldPos(e);
@@ -493,9 +412,71 @@
                 buildGhost.style.top = `${Math.floor(worldPos.y) * CELL_SIZE * camera.scale + camera.y}px`;
             }
         });
-        entityCanvas.addEventListener('mouseup', () => isDragging = false);
-        entityCanvas.addEventListener('mouseleave', () => isDragging = false);
-        entityCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const mousePos = { x: e.clientX - entityCanvas.getBoundingClientRect().left, y: e.clientY - entityCanvas.getBoundingClientRect().top }; const zoom = e.deltaY < 0 ? 1.1 : 1 / 1.1; const newScale = Math.max(0.1, Math.min(camera.scale * zoom, 3.0)); const worldX = (mousePos.x - camera.x) / camera.scale; const worldY = (mousePos.y - camera.y) / camera.scale; camera.x = mousePos.x - worldX * newScale; camera.y = mousePos.y - worldY * newScale; camera.scale = newScale; if (placingBuildingType) { buildGhost.style.width = buildGhost.style.height = `${3 * CELL_SIZE * camera.scale}px`; } renderFOW(); }, { passive: false });
+
+        entityCanvas.addEventListener('mouseup', (e) => {
+            if (e.button === 1) { isDragging = false; return; }
+            if (e.button !== 0) return;
+
+            if (selectionBox.style.display === 'block') {
+                selectionBox.style.display = 'none';
+                const rect = entityCanvas.getBoundingClientRect();
+                const selRect = selectionBox.getBoundingClientRect();
+                const newSelected = new Set();
+                gameState.units.forEach(u => {
+                    if (u.ownerId === myId) {
+                        const unitScreenX = u.x * CELL_SIZE * camera.scale + camera.x + rect.left;
+                        const unitScreenY = u.y * CELL_SIZE * camera.scale + camera.y + rect.top;
+                        if (unitScreenX >= selRect.left && unitScreenX <= selRect.right && unitScreenY >= selRect.top && unitScreenY <= selRect.bottom) {
+                            newSelected.add(u.id);
+                        }
+                    }
+                });
+                if (newSelected.size > 0) {
+                    selectedUnits = newSelected;
+                    selectedBuilding = null;
+                } else { // Single click logic
+                    const worldPos = getMouseWorldPos(e);
+                    selectedUnits.clear(); selectedBuilding = null;
+                    let foundBuilding = null;
+                    gameState.buildings.forEach(b => { if (worldPos.x >= b.x && worldPos.x <= b.x + 3 && worldPos.y >= b.y && worldPos.y <= b.y + 3) foundBuilding = b; });
+                    if(foundBuilding) {
+                        if (foundBuilding.ownerId === myId) selectedBuilding = foundBuilding.id;
+                    } else {
+                        let closestUnit = null, minDistSq = 1;
+                        gameState.units.forEach(u => {
+                            const distSq = (u.x - worldPos.x)**2 + (u.y - worldPos.y)**2;
+                            if (distSq < minDistSq && u.ownerId === myId) { closestUnit = u; minDistSq = distSq; }
+                        });
+                        if (closestUnit) selectedUnits.add(closestUnit.id);
+                    }
+                }
+                updateSelectionPanel();
+            }
+        });
+        
+        entityCanvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (placingBuildingType) { placingBuildingType = null; buildGhost.style.display = 'none'; entityCanvas.style.cursor = 'default'; return; }
+            if (selectedUnits.size === 0) return;
+            const targetPos = getMouseWorldPos(e);
+            let targetEntity = null;
+            let minDistSq = 1.5;
+            [...gameState.units.values(), ...gameState.buildings.values()].forEach(e => {
+                if(e.ownerId !== myId) {
+                    const ePos = e.id.startsWith('bld_') ? {x: e.x + 1.5, y: e.y + 1.5} : {x: e.x, y: e.y};
+                    const distSq = (ePos.x - targetPos.x)**2 + (ePos.y - targetPos.y)**2;
+                    if(distSq < minDistSq) { targetEntity = e; minDistSq = distSq; }
+                }
+            });
+            if (targetEntity) {
+                socket.emit('playerAction', { type: 'ATTACK_TARGET', payload: { unitIds: Array.from(selectedUnits), targetId: targetEntity.id } });
+            } else {
+                socket.emit('playerAction', { type: 'MOVE_UNITS', payload: { unitIds: Array.from(selectedUnits), target: targetPos } });
+            }
+        });
+        
+        entityCanvas.addEventListener('mouseleave', () => { isDragging = false; selectionBox.style.display = 'none'; });
+        entityCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const mousePos = { x: e.clientX - entityCanvas.getBoundingClientRect().left, y: e.clientY - entityCanvas.getBoundingClientRect().top }; const zoom = e.deltaY < 0 ? 1.1 : 1 / 1.1; const newScale = Math.max(0.2, Math.min(camera.scale * zoom, 3.0)); const worldX = (mousePos.x - camera.x) / camera.scale; const worldY = (mousePos.y - camera.y) / camera.scale; camera.x = mousePos.x - worldX * newScale; camera.y = mousePos.y - worldY * newScale; camera.scale = newScale; if (placingBuildingType) { buildGhost.style.width = buildGhost.style.height = `${3 * CELL_SIZE * camera.scale}px`; } renderFOW(); }, { passive: false });
         
         document.getElementById('selection-actions').addEventListener('click', e => {
             const button = e.target.closest('.action-button');
@@ -511,28 +492,16 @@
             }
         });
 
-        document.getElementById('tech-tree').addEventListener('click', e => {
-             const button = e.target.closest('.tech-button');
-             if (button && !button.disabled) {
-                socket.emit('playerAction', { type: 'RESEARCH_TECH', payload: { techId: button.dataset.tech } });
-                button.classList.add('researched');
-                button.disabled = true;
-             }
-        });
-
         function resizeCanvas() {
             const viewport = document.getElementById('game-viewport');
             [entityCanvas, fowCanvas].forEach(c => { c.width = viewport.clientWidth; c.height = viewport.clientHeight; });
             const minimapPanel = document.querySelector('.minimap-panel');
             minimapCanvas.width = minimapPanel.clientWidth - 30;
             minimapCanvas.height = minimapCanvas.width;
-            if(gameState) {
-                renderFOW();
-                renderMinimap();
-            }
+            if(gameState) { renderFOW(); renderMinimap(); }
         }
         window.addEventListener('resize', resizeCanvas);
     </script>
 </body>
 </html>
-<!-- END OF FILE index.html (Absolutní finální verze) -->
+<!-- END OF FILE index.html (Konečná verze s reworkem) -->

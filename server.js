@@ -1,4 +1,4 @@
-// --- START OF FILE server.js (Absolutní finální verze) ---
+// --- START OF FILE server.js (Konečná verze s reworkem) ---
 
 const http = require('http');
 const express = require('express');
@@ -10,7 +10,6 @@ const server = http.createServer(app);
 const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 
-// --- KONFIGURACE HRY: AVALON ---
 const GAME_CONFIG = {
     GRID_SIZE: 250,
     TICK_RATE: 50,
@@ -21,36 +20,26 @@ const GAME_CONFIG = {
         FOREST: { name: 'Les', movement_cost: 1.5, buildable: false, color: '#388e3c' },
         MOUNTAIN: { name: 'Hory', movement_cost: 2.5, buildable: false, color: '#795548' }
     },
-    INITIAL_RESOURCES: { gold: 200, food: 150, wood: 100, stone: 50, science: 0 },
+    INITIAL_RESOURCES: { gold: 200, food: 150, wood: 100, stone: 50 },
     UNITS: {
         STAVITEL: { name: "Stavitel", hp: 50, speed: 1.8, cost: { gold: 50, food: 10 }, upkeep: { food: 0.1 }, can_build: true, attack: 2, range: 1, attack_speed: 0.5, vision: 8 },
         PECHOTA: { name: "Pěchota", hp: 100, speed: 1.5, cost: { gold: 25, food: 10 }, upkeep: { food: 0.2 }, attack: 10, range: 1, attack_speed: 1, vision: 7 },
         LUCISTNIK: { name: "Lučištník", hp: 70, speed: 1.6, cost: { gold: 35, wood: 20 }, upkeep: { food: 0.25 }, attack: 12, range: 6, attack_speed: 1.2, vision: 9 },
         JIZDA: { name: "Jízda", hp: 130, speed: 2.5, cost: { gold: 60, food: 20 }, upkeep: { food: 0.4 }, attack: 15, range: 1.2, attack_speed: 0.9, vision: 10 }
     },
-    RPS_MODIFIERS: {
-        PECHOTA: { JIZDA: 1.5, LUCISTNIK: 0.75 },
-        LUCISTNIK: { PECHOTA: 1.5, JIZDA: 0.75 },
-        JIZDA: { LUCISTNIK: 1.5, PECHOTA: 0.75 }
-    },
+    RPS_MODIFIERS: { PECHOTA: { JIZDA: 1.5, LUCISTNIK: 0.75 }, LUCISTNIK: { PECHOTA: 1.5, JIZDA: 0.75 }, JIZDA: { LUCISTNIK: 1.5, PECHOTA: 0.75 } },
     BUILDINGS: {
-        ZAKLADNA: { name: 'Hlavní město', hp: 2000, cost: {}, build_time: 0, provides_pop: 10, trains: ['STAVITEL'], vision: 12 },
-        DUM: { name: 'Dům', hp: 250, cost: { wood: 30 }, build_time: 8, provides_pop: 5, vision: 3 },
+        ZAKLADNA: { name: 'Hlavní město', hp: 2000, cost: {}, build_time: 0, provides_pop: 10, trains: ['STAVITEL', 'PECHOTA'], vision: 12 },
+        DUM: { name: 'Dům', hp: 250, cost: { wood: 30 }, build_time: 8, provides_pop: 5, vision: 3, placement: 'ANY' },
         FARMA: { name: 'Farma', hp: 300, cost: { wood: 50 }, build_time: 10, production: { food: 0.8 }, placement: 'PLAINS', vision: 3 },
         PILA: { name: 'Pila', hp: 300, cost: { wood: 60 }, build_time: 12, production: { wood: 0.5 }, placement: 'FOREST', vision: 3 },
         DUL: { name: 'Důl', hp: 400, cost: { wood: 80, stone: 20 }, build_time: 15, production: { gold: 0.25, stone: 0.1 }, placement: 'MOUNTAIN', vision: 3 },
+        VEZ: { name: 'Obranná Věž', hp: 600, cost: { stone: 100, gold: 25 }, build_time: 20, placement: 'ANY', vision: 10, attack: 20, range: 8, attack_speed: 0.8 },
         KASARNY: { name: 'Kasárny', hp: 700, cost: { wood: 100, stone: 50 }, build_time: 20, trains: ['PECHOTA'], vision: 4 },
         STRELNICE: { name: 'Střelnice', hp: 600, cost: { wood: 120 }, build_time: 25, trains: ['LUCISTNIK'], vision: 4 },
         STAJE: { name: 'Stáje', hp: 800, cost: { gold: 50, wood: 150 }, build_time: 30, trains: ['JIZDA'], vision: 4 },
-        UNIVERZITA: { name: 'Univerzita', hp: 500, cost: { gold: 100, wood: 200 }, build_time: 40, production: { science: 0.5 }, vision: 4 }
-    },
-    TECH_TREE: {
-        vylepsene_zemedelstvi: { name: 'Vylepšené zemědělství', cost: { science: 50 }, effect: { food_prod_modifier: 0.2 } },
-        kovarstvi: { name: 'Kovářství', cost: { science: 100 }, effect: { unit_attack_modifier: 0.1 } },
-        opevneni: { name: 'Opevnění', cost: { science: 75 }, effect: { building_hp_modifier: 0.2 } },
     }
 };
-
 const games = {};
 const createId = (length = 5) => Math.random().toString(36).substr(2, length).toUpperCase();
 const canAfford = (player, cost) => Object.keys(cost).every(res => player.resources[res] >= cost[res]);
@@ -68,20 +57,13 @@ function updateVisibility(game) {
     game.players.forEach(player => {
         const visibilityMap = game.visibilityMaps[player.id];
         const dirtyCells = [];
-        for (let i = 0; i < visibilityMap.length; i++) {
-            if (visibilityMap[i] === FOW_STATE.VISIBLE) {
-                visibilityMap[i] = FOW_STATE.EXPLORED;
-            }
-        }
+        for (let i = 0; i < visibilityMap.length; i++) { if (visibilityMap[i] === FOW_STATE.VISIBLE) visibilityMap[i] = FOW_STATE.EXPLORED; }
         const reveal = (x, y, range) => {
-            const startX = Math.max(0, Math.floor(x - range));
-            const endX = Math.min(game.board.length - 1, Math.floor(x + range));
-            const startY = Math.max(0, Math.floor(y - range));
-            const endY = Math.min(game.board.length - 1, Math.floor(y + range));
-            for (let iy = startY; iy <= endY; iy++) {
-                for (let ix = startX; ix <= endX; ix++) {
-                    const distSq = (x - ix) ** 2 + (y - iy) ** 2;
-                    if (distSq <= range ** 2) {
+            const sX = Math.max(0, Math.floor(x - range)), eX = Math.min(game.board.length - 1, Math.floor(x + range));
+            const sY = Math.max(0, Math.floor(y - range)), eY = Math.min(game.board.length - 1, Math.floor(y + range));
+            for (let iy = sY; iy <= eY; iy++) {
+                for (let ix = sX; ix <= eX; ix++) {
+                    if ((x - ix) ** 2 + (y - iy) ** 2 <= range ** 2) {
                         const index = iy * GAME_CONFIG.GRID_SIZE + ix;
                         if (visibilityMap[index] !== FOW_STATE.VISIBLE) {
                             visibilityMap[index] = FOW_STATE.VISIBLE;
@@ -93,9 +75,7 @@ function updateVisibility(game) {
         };
         Object.values(player.units).forEach(u => reveal(u.x, u.y, GAME_CONFIG.UNITS[u.type].vision));
         Object.values(game.buildings).filter(b => b.ownerId === player.id && b.buildProgress === 1).forEach(b => reveal(b.x + 1.5, b.y + 1.5, GAME_CONFIG.BUILDINGS[b.type].vision));
-        if (dirtyCells.length > 0) {
-            game.dirtyData.visibilityChanges[player.id] = (game.dirtyData.visibilityChanges[player.id] || []).concat(dirtyCells);
-        }
+        if (dirtyCells.length > 0) game.dirtyData.visibilityChanges[player.id] = (game.dirtyData.visibilityChanges[player.id] || []).concat(dirtyCells);
     });
 }
 
@@ -127,31 +107,24 @@ function createPlayerUpdatePacket(game, playerId) {
     const playerVisibilityMap = game.visibilityMaps[playerId];
     const dirty = game.dirtyData;
     const isVisible = (x, y) => {
-        const ix = Math.floor(x);
-        const iy = Math.floor(y);
+        const ix = Math.floor(x), iy = Math.floor(y);
         if (ix < 0 || iy < 0 || ix >= GAME_CONFIG.GRID_SIZE || iy >= GAME_CONFIG.GRID_SIZE) return false;
         return playerVisibilityMap[iy * GAME_CONFIG.GRID_SIZE + ix] === FOW_STATE.VISIBLE;
     };
     const packet = { players: [], units: [], buildings: [], events: [], visibilityChanges: dirty.visibilityChanges[playerId] || [] };
     dirty.players.forEach(id => {
         const p = game.players.find(pl => pl.id === id);
-        if (p && id === playerId) {
-            packet.players.push({ id: p.id, resources: p.resources, pop: p.pop, techs: Array.from(p.techs) });
-        }
+        if (p && id === playerId) packet.players.push({ id: p.id, resources: p.resources, pop: p.pop });
     });
     Object.values(game.units).forEach(u => {
-        if (isVisible(u.x, u.y)) {
-             packet.units.push({ id: u.id, ownerId: u.ownerId, type: u.type, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, moveTarget: u.moveTarget });
-        }
+        if (isVisible(u.x, u.y)) packet.units.push({ id: u.id, ownerId: u.ownerId, type: u.type, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, moveTarget: u.moveTarget });
     });
     Object.values(game.buildings).forEach(b => {
-         if (isVisible(b.x + 1.5, b.y + 1.5)) {
-            packet.buildings.push({ id: b.id, ownerId: b.ownerId, type: b.type, x: b.x, y: b.y, hp: b.hp, maxHp: b.maxHp, buildProgress: b.buildProgress, trainingQueue: b.trainingQueue.map(i => ({unitType: i.unitType, progress: i.progress})) });
-        }
+         if (isVisible(b.x + 1.5, b.y + 1.5)) packet.buildings.push({ id: b.id, ownerId: b.ownerId, type: b.type, x: b.x, y: b.y, hp: b.hp, maxHp: b.maxHp, buildProgress: b.buildProgress, trainingQueue: b.trainingQueue.map(i => ({unitType: i.unitType, progress: i.progress})) });
     });
     packet.events = dirty.events.filter(e => {
         if(e.type === 'UNITS_DIED') return true;
-        const pos = e.pos || e.to;
+        const pos = e.pos || e.from || e.to;
         return pos && isVisible(pos.x, pos.y);
     });
     return packet;
@@ -159,21 +132,17 @@ function createPlayerUpdatePacket(game, playerId) {
 
 function updateResourceProduction(game, deltaTime) {
     game.players.forEach(p => {
-        const production = { gold: 0, food: 0, wood: 0, stone: 0, science: 0 };
+        const production = { gold: 0, food: 0, wood: 0, stone: 0 };
         const upkeep = { food: 0 };
         Object.values(game.buildings).filter(b => b.ownerId === p.id && b.buildProgress === 1).forEach(b => {
             const b_config = GAME_CONFIG.BUILDINGS[b.type];
-            if (b_config.production) {
-                for (const res in b_config.production) production[res] += b_config.production[res];
-            }
+            if (b_config.production) { for (const res in b_config.production) production[res] += b_config.production[res]; }
         });
-        if (p.techs.has('vylepsene_zemedelstvi')) production.food *= (1 + GAME_CONFIG.TECH_TREE.vylepsene_zemedelstvi.effect.food_prod_modifier);
         Object.values(p.units).forEach(u => upkeep.food += GAME_CONFIG.UNITS[u.type].upkeep.food || 0);
         p.resources.gold += production.gold * deltaTime;
         p.resources.food += (production.food - upkeep.food) * deltaTime;
         p.resources.wood += production.wood * deltaTime;
         p.resources.stone += production.stone * deltaTime;
-        p.resources.science += production.science * deltaTime;
         if (p.resources.food < 0) p.resources.food = 0;
         game.dirtyData.players.add(p.id);
     });
@@ -225,12 +194,8 @@ function updateUnitMovement(game, deltaTime) {
         const dx = u.moveTarget.x - u.x;
         const dy = u.moveTarget.y - u.y;
         const dist = Math.hypot(dx, dy);
-        if (dist < 0.5) {
-            u.moveTarget = null;
-            return;
-        }
-        const gridX = Math.floor(u.x);
-        const gridY = Math.floor(u.y);
+        if (dist < 0.5) { u.moveTarget = null; return; }
+        const gridX = Math.floor(u.x), gridY = Math.floor(u.y);
         const terrainType = game.board[gridY]?.[gridX] || 'PLAINS';
         const unitConf = GAME_CONFIG.UNITS[u.type];
         const speedModifier = 1 / (GAME_CONFIG.TERRAIN[terrainType]?.movement_cost || 1);
@@ -244,48 +209,69 @@ function updateUnitMovement(game, deltaTime) {
 function updateCombat(game, deltaTime) {
     const deadUnits = new Set();
     const allUnits = Object.values(game.units);
-    allUnits.forEach(u => {
-        if (deadUnits.has(u.id)) return;
-        const u_conf = GAME_CONFIG.UNITS[u.type];
-        if (u.attackCooldown > 0) u.attackCooldown -= deltaTime;
-        let target = u.targetUnitId ? game.units[u.targetUnitId] : null;
-        if (!target || deadUnits.has(target.id)) {
-            u.targetUnitId = null;
-            let closestEnemy = null;
-            let min_dist_sq = (u_conf.vision)**2;
-            allUnits.forEach(potentialTarget => {
-                if (potentialTarget.ownerId !== u.ownerId && !deadUnits.has(potentialTarget.id)) {
-                    const dist_sq = (u.x - potentialTarget.x)**2 + (u.y - potentialTarget.y)**2;
-                    if (dist_sq < min_dist_sq) {
-                        min_dist_sq = dist_sq;
-                        closestEnemy = potentialTarget;
-                    }
+    const allTargets = allUnits.concat(Object.values(game.buildings));
+
+    const findTarget = (entity, entity_conf) => {
+        let closestEnemy = null;
+        let min_dist_sq = (entity_conf.vision || 5)**2;
+        allTargets.forEach(potentialTarget => {
+            if (potentialTarget.ownerId !== entity.ownerId && potentialTarget.hp > 0) {
+                const p_conf = potentialTarget.id.startsWith('id_') ? GAME_CONFIG.UNITS[potentialTarget.type] : GAME_CONFIG.BUILDINGS[potentialTarget.type];
+                if (!p_conf) return; // Skip if target has no config
+                const targetPos = potentialTarget.id.startsWith('id_') ? {x: potentialTarget.x, y: potentialTarget.y} : {x: potentialTarget.x + 1.5, y: potentialTarget.y + 1.5};
+                const dist_sq = (entity.x - targetPos.x)**2 + (entity.y - targetPos.y)**2;
+                if (dist_sq < min_dist_sq) {
+                    min_dist_sq = dist_sq;
+                    closestEnemy = potentialTarget;
                 }
-            });
-            if (closestEnemy) u.targetUnitId = closestEnemy.id;
-            target = closestEnemy;
+            }
+        });
+        return closestEnemy;
+    };
+
+    allTargets.forEach(attacker => {
+        if (deadUnits.has(attacker.id) || !attacker.ownerId) return;
+
+        const isUnit = attacker.id.startsWith('id_');
+        const attacker_conf = isUnit ? GAME_CONFIG.UNITS[attacker.type] : GAME_CONFIG.BUILDINGS[attacker.type];
+        if (!attacker_conf.attack) return;
+
+        if (attacker.attackCooldown > 0) attacker.attackCooldown -= deltaTime;
+
+        let target = attacker.targetId ? allTargets.find(t => t.id === attacker.targetId) : null;
+        if (!target || target.hp <= 0) {
+            target = findTarget(attacker, attacker_conf);
+            attacker.targetId = target ? target.id : null;
         }
+
         if (target) {
-            const distSq = (u.x - target.x)**2 + (u.y - target.y)**2;
-            if (distSq <= u_conf.range**2) {
-                u.moveTarget = null;
-                if (u.attackCooldown <= 0) {
-                    const modifier = GAME_CONFIG.RPS_MODIFIERS[u.type]?.[target.type] || 1;
-                    const damage = u_conf.attack * modifier;
+            const targetPos = target.id.startsWith('id_') ? {x: target.x, y: target.y} : {x: target.x + 1.5, y: target.y + 1.5};
+            const distSq = (attacker.x - targetPos.x)**2 + (attacker.y - targetPos.y)**2;
+
+            if (distSq <= attacker_conf.range**2) {
+                if (isUnit) attacker.moveTarget = null;
+                if (attacker.attackCooldown <= 0) {
+                    const damage = attacker_conf.attack;
                     target.hp -= damage;
-                    game.dirtyData.events.push({ type: 'ATTACK_EFFECT', from: {x: u.x, y: u.y}, to: {x: target.x, y: target.y}, unitType: u.type });
-                    game.dirtyData.units.add(target.id);
-                    u.attackCooldown = 1 / u_conf.attack_speed;
-                    if (target.hp <= 0) deadUnits.add(target.id);
+                    
+                    const attackPos = isUnit ? {x: attacker.x, y: attacker.y} : {x: attacker.x + 1.5, y: attacker.y + 1.5};
+                    game.dirtyData.events.push({ type: 'ATTACK_EFFECT', from: attackPos, to: targetPos, unitType: attacker.type });
+                    
+                    if (target.id.startsWith('id_')) game.dirtyData.units.add(target.id);
+                    else game.dirtyData.buildings.add(target.id);
+
+                    attacker.attackCooldown = 1 / attacker_conf.attack_speed;
+                    if (target.hp <= 0 && target.id.startsWith('id_')) deadUnits.add(target.id);
                 }
-            } else { 
-                u.moveTarget = { x: target.x, y: target.y };
+            } else if (isUnit) {
+                attacker.moveTarget = targetPos;
             }
         }
     });
+
     if (deadUnits.size > 0) {
         deadUnits.forEach(deadId => {
-            const deadUnit = game.units[deadId];
+            const deadUnit = allUnits.find(u => u.id === deadId);
             if (deadUnit) {
                 const owner = game.players.find(p => p.id === deadUnit.ownerId);
                 if (owner) {
@@ -303,9 +289,8 @@ function updateCombat(game, deltaTime) {
 function createUnit(game, player, unitType, pos) {
     const u_config = GAME_CONFIG.UNITS[unitType];
     const newUnit = {
-        id: createId(), ownerId: player.id, type: unitType, x: pos.x, y: pos.y,
-        hp: u_config.hp, maxHp: u_config.hp,
-        attackCooldown: 0, moveTarget: null, targetUnitId: null, can_build: u_config.can_build || false
+        id: createId(), ownerId: player.id, type: unitType, x: pos.x, y: pos.y, hp: u_config.hp, maxHp: u_config.hp,
+        attackCooldown: 0, moveTarget: null, targetId: null, can_build: u_config.can_build || false
     };
     game.units[newUnit.id] = newUnit;
     player.units[newUnit.id] = newUnit;
@@ -322,15 +307,16 @@ function handlePlayerAction(socket, action) {
             const { unitIds, target } = action.payload;
             unitIds.forEach(id => {
                 const unit = pData.units[id];
-                if (unit) { unit.moveTarget = target; unit.targetUnitId = null; }
+                if (unit) { unit.moveTarget = target; unit.targetId = null; }
             });
             break;
         }
         case 'ATTACK_TARGET': {
             const { unitIds, targetId } = action.payload;
+            const allTargets = {...game.units, ...game.buildings};
             unitIds.forEach(id => {
                  const unit = pData.units[id];
-                 if(unit && game.units[targetId]) unit.targetUnitId = targetId;
+                 if(unit && allTargets[targetId]) unit.targetId = targetId;
             });
             break;
         }
@@ -340,13 +326,14 @@ function handlePlayerAction(socket, action) {
             const config = GAME_CONFIG.BUILDINGS[structureType];
             if (builder?.can_build && config && canAfford(pData, config.cost)) {
                 const terrainType = game.board[Math.floor(position.y)]?.[Math.floor(position.x)];
-                if (config.placement && config.placement !== terrainType) {
+                if (config.placement && config.placement !== 'ANY' && config.placement !== terrainType) {
                     return socket.emit('gameError', { message: `Nelze postavit ${config.name} na tomto terénu.` });
                 }
                 deductCost(pData, config.cost);
                 const newBuilding = {
-                    id: createId(), ownerId: pData.id, type: structureType, x: position.x, y: position.y, hp: 1, maxHp: config.hp,
+                    id: `bld_${createId(8)}`, ownerId: pData.id, type: structureType, x: position.x, y: position.y, hp: 1, maxHp: config.hp,
                     buildProgress: 0, buildTime: config.build_time, trainingQueue: [], rallyPoint: {x: position.x + 3, y: position.y + 3},
+                    attackCooldown: 0, targetId: null
                 };
                 game.buildings[newBuilding.id] = newBuilding;
                 builder.moveTarget = position;
@@ -364,16 +351,6 @@ function handlePlayerAction(socket, action) {
                     building.trainingQueue.push({ unitType, buildTime: unitConfig.cost.gold / 2.5, progress: 0 });
                     game.dirtyData.players.add(pData.id);
                 }
-            }
-            break;
-        }
-        case 'RESEARCH_TECH': {
-            const { techId } = action.payload;
-            const techConfig = GAME_CONFIG.TECH_TREE[techId];
-            if (techConfig && !pData.techs.has(techId) && canAfford(pData, techConfig.cost)) {
-                deductCost(pData, techConfig.cost);
-                pData.techs.add(techId);
-                game.dirtyData.players.add(pData.id);
             }
             break;
         }
@@ -405,10 +382,10 @@ function initializeGame(game) {
     game.lastTickTime = Date.now();
     game.visibilityMaps = {};
     const startPositions = [
-        { x: 30, y: 30 }, { x: GAME_CONFIG.GRID_SIZE - 30, y: 30 },
-        { x: GAME_CONFIG.GRID_SIZE - 30, y: GAME_CONFIG.GRID_SIZE - 30 }, { x: 30, y: GAME_CONFIG.GRID_SIZE - 30 },
-        { x: 30, y: GAME_CONFIG.GRID_SIZE / 2 }, { x: GAME_CONFIG.GRID_SIZE - 30, y: GAME_CONFIG.GRID_SIZE / 2 },
-        { x: GAME_CONFIG.GRID_SIZE / 2, y: 30 }, { x: GAME_CONFIG.GRID_SIZE / 2, y: GAME_CONFIG.GRID_SIZE - 30 }
+        { x: 30, y: 30 }, { x: GAME_CONFIG.GRID_SIZE - 40, y: 30 },
+        { x: GAME_CONFIG.GRID_SIZE - 40, y: GAME_CONFIG.GRID_SIZE - 40 }, { x: 30, y: GAME_CONFIG.GRID_SIZE - 40 },
+        { x: 30, y: GAME_CONFIG.GRID_SIZE / 2 }, { x: GAME_CONFIG.GRID_SIZE - 40, y: GAME_CONFIG.GRID_SIZE / 2 },
+        { x: GAME_CONFIG.GRID_SIZE / 2, y: 30 }, { x: GAME_CONFIG.GRID_SIZE / 2, y: GAME_CONFIG.GRID_SIZE - 40 }
     ];
     game.players.forEach((player, index) => {
         game.visibilityMaps[player.id] = new Uint8Array(GAME_CONFIG.GRID_SIZE * GAME_CONFIG.GRID_SIZE).fill(FOW_STATE.HIDDEN);
@@ -417,22 +394,19 @@ function initializeGame(game) {
         player.resources = { ...GAME_CONFIG.INITIAL_RESOURCES };
         player.units = {};
         player.pop = { current: 0, cap: 0 };
-        player.techs = new Set();
         player.color = GAME_CONFIG.PLAYER_COLORS[index];
         const base = {
-            id: createId(), ownerId: player.id, type: 'ZAKLADNA', x: pos.x, y: pos.y, hp: GAME_CONFIG.BUILDINGS.ZAKLADNA.hp,
+            id: `bld_${createId(8)}`, ownerId: player.id, type: 'ZAKLADNA', x: pos.x, y: pos.y, hp: GAME_CONFIG.BUILDINGS.ZAKLADNA.hp,
             maxHp: GAME_CONFIG.BUILDINGS.ZAKLADNA.hp, buildProgress: 1, buildTime: 0, trainingQueue: [], rallyPoint: {x:pos.x+3, y:pos.y+3}
         };
         game.buildings[base.id] = base;
-        createUnit(game, player, 'STAVITEL', {x: pos.x + 3, y: pos.y});
-        createUnit(game, player, 'PECHOTA', {x: pos.x - 3, y: pos.y});
-        createUnit(game, player, 'PECHOTA', {x: pos.x, y: pos.y + 3});
+        createUnit(game, player, 'STAVITEL', {x: pos.x + 4, y: pos.y});
+        createUnit(game, player, 'PECHOTA', {x: pos.x - 2, y: pos.y});
         calculatePlayerPopCap(player, game);
         calculatePlayerPop(player);
     });
     const initialPacket = {
-        gameCode: game.code,
-        config: GAME_CONFIG,
+        gameCode: game.code, config: GAME_CONFIG,
         players: game.players.map(p => ({ id: p.id, name: p.name, color: p.color, startPos: p.startPos })),
         board: game.board,
     };
@@ -441,9 +415,10 @@ function initializeGame(game) {
 }
 
 io.on('connection', (socket) => {
-    socket.playerInfo = { id: socket.id, name: 'Anonym' };
-    
+    socket.playerInfo = {};
+
     socket.on('setPlayerName', name => {
+        socket.playerInfo.id = socket.id;
         socket.playerInfo.name = name.trim() || `Kokot${Math.floor(Math.random() * 1000)}`;
     });
 
@@ -456,7 +431,7 @@ io.on('connection', (socket) => {
         games[gameCode] = game;
         socket.join(gameCode);
         socket.gameCode = gameCode;
-        socket.emit('lobbyJoined', { gameCode: game.code, players: game.players, hostId: game.hostId });
+        socket.emit('lobbyUpdate', { gameCode: game.code, players: game.players, hostId: game.hostId });
         if (isSolo) initializeGame(game);
     });
 
@@ -471,7 +446,7 @@ io.on('connection', (socket) => {
             socket.gameCode = gameCode;
             game.sockets.push(socket);
             game.players.push(socket.playerInfo);
-            io.to(gameCode).emit('lobbyUpdate', { players: game.players, hostId: game.hostId });
+            io.to(gameCode).emit('lobbyUpdate', { gameCode: game.code, players: game.players, hostId: game.hostId });
         } else {
             socket.emit('gameError', { message: 'Lobby neexistuje nebo hra již běží.' });
         }
@@ -504,7 +479,6 @@ io.on('connection', (socket) => {
                     io.to(game.code).emit('gameOver', { reason: `${socket.playerInfo.name} opustil bojiště.` });
                     delete games[socket.gameCode];
                 } else {
-                    socket.leave(gameCode);
                     const playerIndex = game.players.findIndex(p => p.id === socket.id);
                     if (playerIndex > -1) game.players.splice(playerIndex, 1);
                     game.sockets = game.sockets.filter(s => s.id !== socket.id);
@@ -512,7 +486,7 @@ io.on('connection', (socket) => {
                         delete games[socket.gameCode];
                     } else {
                         if (socket.id === game.hostId) game.hostId = game.players[0].id;
-                        io.to(game.code).emit('lobbyUpdate', { players: game.players, hostId: game.hostId });
+                        io.to(game.code).emit('lobbyUpdate', { gameCode: game.code, players: game.players, hostId: game.hostId });
                     }
                 }
             }
@@ -523,4 +497,4 @@ io.on('connection', (socket) => {
 app.use(express.static(path.join(__dirname, 'public')));
 server.listen(PORT, () => console.log(`Server Avalon běží na portu ${PORT}`));
 
-// --- END OF FILE server.js (Absolutní finální verze) ---
+// --- END OF FILE server.js (Konečná verze s reworkem) ---
