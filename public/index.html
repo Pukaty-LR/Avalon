@@ -6,7 +6,7 @@
     <link rel="stylesheet" href="styl.css">
 </head>
 <body>
-    <!-- Sekce LOBBY, na začátku viditelná -->
+    <!-- Sekce LOBBY -->
     <div id="lobby-section">
         <div class="lobby-container" id="name-selection">
             <h1>Pixelová Říše</h1>
@@ -31,7 +31,7 @@
         </div>
     </div>
 
-    <!-- Sekce HRA, na začátku skrytá -->
+    <!-- Sekce HRA -->
     <div id="game-section" style="display: none;">
         <div class="info-column">
             <div class="stats-panel">
@@ -68,14 +68,8 @@
         const lobbySection = document.getElementById('lobby-section');
         const gameSection = document.getElementById('game-section');
 
-        function showLobby() {
-            lobbySection.style.display = 'flex';
-            gameSection.style.display = 'none';
-        }
-        function showGame() {
-            lobbySection.style.display = 'none';
-            gameSection.style.display = 'flex';
-        }
+        function showLobby() { lobbySection.style.display = 'flex'; gameSection.style.display = 'none'; }
+        function showGame() { lobbySection.style.display = 'none'; gameSection.style.display = 'flex'; }
 
         // --- LOBBY LOGIKA ---
         const nameSelection = document.getElementById('name-selection');
@@ -142,10 +136,12 @@
         const ctx = canvas.getContext('2d');
         const minimapCanvas = document.getElementById('minimap');
         const minimapCtx = minimapCanvas.getContext('2d');
+        const ICON_MAP = { base: '🏡', village: '🏘️', mine: '⛏️', crystal_mine: '💎', ancient_library: '📚', trading_post: '⚖️', barracks: '⚔️', watchtower: '👁️' };
 
         function initializeGame(initialState) {
             gameState = initialState;
             myId = socket.id;
+            gameState.structures = new Map(initialState.structures.map(s => [s.id, s]));
             showGame();
             resizeCanvas();
             gameLoop();
@@ -154,8 +150,15 @@
         socket.on('gameStarted', initializeGame);
         socket.on('gameStateUpdate', (updatePacket) => {
             if (!gameState) return;
-            gameState.players = updatePacket.players;
+            updatePacket.players.forEach(updatedPlayer => {
+                const playerIndex = gameState.players.findIndex(p => p.id === updatedPlayer.id);
+                if (playerIndex !== -1) {
+                    Object.assign(gameState.players[playerIndex], updatedPlayer);
+                }
+            });
+
             gameState.expeditions = updatePacket.expeditions;
+            
             updatePacket.boardChanges.forEach(change => {
                 if (gameState.gameBoard[change.y]?.[change.x]) {
                     gameState.gameBoard[change.y][change.x].ownerId = change.ownerId;
@@ -172,7 +175,11 @@
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.translate(camera.x, camera.y);
             ctx.scale(camera.scale, camera.scale);
+            
             renderBoard();
+            renderStructures();
+            renderExpeditions();
+            
             ctx.restore();
             renderMinimap();
             renderUI();
@@ -194,6 +201,41 @@
                     ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
                 }
             }
+        }
+
+        function renderStructures() {
+            const playerColorMap = new Map(gameState.players.map(p => [p.id, p.color]));
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            gameState.structures.forEach(s => {
+                const sCenterX = s.x * CELL_SIZE + (s.w * CELL_SIZE / 2);
+                const sCenterY = s.y * CELL_SIZE + (s.h * CELL_SIZE / 2);
+                
+                if (s.ownerId) {
+                    ctx.strokeStyle = playerColorMap.get(s.ownerId) || '#888';
+                    ctx.lineWidth = 2 / camera.scale;
+                    ctx.strokeRect(s.x * CELL_SIZE, s.y * CELL_SIZE, s.w * CELL_SIZE, s.h * CELL_SIZE);
+                }
+
+                const icon = ICON_MAP[s.type.replace('owned_', '')];
+                if(icon) {
+                    ctx.font = `${s.w * CELL_SIZE * 0.8}px sans-serif`;
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(icon, sCenterX, sCenterY);
+                }
+            });
+        }
+
+        function renderExpeditions() {
+            const playerColorMap = new Map(gameState.players.map(p => [p.id, p.color]));
+            gameState.expeditions.forEach(exp => {
+                const color = playerColorMap.get(exp.ownerId) || 'grey';
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(exp.currentX * CELL_SIZE, exp.currentY * CELL_SIZE, CELL_SIZE * 0.75, 0, Math.PI * 2);
+                ctx.fill();
+            });
         }
 
         function renderMinimap() {
@@ -223,7 +265,15 @@
                 document.getElementById('crystals-display').textContent = Math.floor(me.crystals);
                 document.getElementById('units-display').textContent = me.units;
                 document.getElementById('territory-display').textContent = me.territoryCount;
+                document.getElementById('expeditions-display').textContent = gameState.expeditions.filter(e => e.ownerId === myId).length;
+                updateSliderLabel(me.units);
             }
+        }
+
+        function updateSliderLabel(totalUnits) {
+            const percentage = document.getElementById('expedition-slider').value;
+            const unitsToSend = Math.max(1, Math.ceil(totalUnits * (percentage / 100)));
+            document.getElementById('expedition-slider-value').textContent = `${percentage}% (${unitsToSend} ⚔️)`;
         }
         
         function resizeCanvas() { canvas.width = viewportEl.clientWidth; canvas.height = viewportEl.clientHeight; }
@@ -258,7 +308,9 @@
 
             socket.emit('launchExpedition', { gameCode: gameState.code, target: { x: targetX, y: targetY }, units: unitsToSend });
         });
-
+        document.getElementById('buy-unit-button').addEventListener('click', () => {
+             socket.emit('buyUnit', { gameCode: gameState.code });
+        });
     </script>
 </body>
 </html>
