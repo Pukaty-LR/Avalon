@@ -1,4 +1,4 @@
-/* --- START OF FILE styl.css (Finální opravená verze) --- */
+/* --- START OF FILE styl.css (Definitivní oprava) --- */
 :root {
     --color-bg: #1e272e;
     --color-ui-bg: #34495e;
@@ -29,7 +29,6 @@ body {
     user-select: none;
 }
 
-/* --- Univerzální třída pro obrazovky --- */
 .screen {
     display: flex;
     justify-content: center;
@@ -39,7 +38,6 @@ body {
     box-sizing: border-box;
 }
 
-/* --- LOBBY & MENU STYLY --- */
 .menu-container, .lobby-container {
     background-color: var(--color-ui-bg);
     padding: 40px;
@@ -64,13 +62,11 @@ body {
 #playerList li.host { font-weight: bold; border-left: 4px solid var(--color-accent); }
 #waiting-message { color: var(--color-text-muted); }
 
-/* --- HERNÍ STYLY --- */
 #game-section { display: none; flex-direction: column; width: 100vw; height: 100vh; }
 
 .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 5px 20px; background-color: var(--color-ui-bg); border-bottom: 2px solid var(--color-ui-border); flex-shrink: 0; }
 .resource-panel { display: flex; gap: 25px; }
 .resource { font-size: 1.2em; display: flex; align-items: center; gap: 8px; }
-#gold-display, #food-display, #wood-display, #stone-display, #science-display { font-weight: bold; }
 #gold-display { color: var(--color-gold); }
 #food-display { color: var(--color-food); }
 #wood-display { color: var(--color-wood); }
@@ -129,4 +125,4 @@ body {
     box-sizing: border-box;
 }
 
-/* --- END OF FILE styl.css (Finální opravená verze) --- */
+/* --- END OF FILE styl.css (Definitivní oprava) --- */

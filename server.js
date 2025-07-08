@@ -1,4 +1,4 @@
-// --- START OF FILE server.js (Finální opravená verze) ---
+// --- START OF FILE server.js (Definitivní oprava) ---
 
 const http = require('http');
 const express = require('express');
@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3000;
 // --- KONFIGURACE HRY: AVALON ---
 const GAME_CONFIG = {
     GRID_SIZE: 250,
-    TICK_RATE: 50, // 20 ticků/s
+    TICK_RATE: 50,
     PLAYER_COLORS: ['#4caf50', '#f44336', '#2196f3', '#ffc107', '#9c27b0', '#ff9800'],
     TERRAIN: {
         PLAINS: { name: 'Roviny', movement_cost: 1.0, buildable: true, color: '#a5d6a7' },
@@ -28,9 +28,9 @@ const GAME_CONFIG = {
         JIZDA: { name: "Jízda", hp: 130, speed: 2.5, cost: { gold: 60, food: 20 }, upkeep: { food: 0.4 }, attack: 15, range: 1.2, attack_speed: 0.9, vision: 10 }
     },
     RPS_MODIFIERS: {
-        PECHOTA: { default: 1, JIZDA: 1.5, LUCISTNIK: 0.75 },
-        LUCISTNIK: { default: 1, PECHOTA: 1.5, JIZDA: 0.75 },
-        JIZDA: { default: 1, LUCISTNIK: 1.5, PECHOTA: 0.75 }
+        PECHOTA: { JIZDA: 1.5, LUCISTNIK: 0.75 },
+        LUCISTNIK: { PECHOTA: 1.5, JIZDA: 0.75 },
+        JIZDA: { LUCISTNIK: 1.5, PECHOTA: 0.75 }
     },
     BUILDINGS: {
         ZAKLADNA: { name: 'Hlavní město', hp: 2000, cost: {}, build_time: 0, provides_pop: 10, trains: ['STAVITEL'], vision: 12 },
@@ -50,10 +50,8 @@ const GAME_CONFIG = {
     }
 };
 
-// --- HERNÍ STAV ---
 const games = {};
 
-// --- POMOCNÉ FUNKCE ---
 const createId = (length = 5) => Math.random().toString(36).substr(2, length).toUpperCase();
 const canAfford = (player, cost) => Object.keys(cost).every(res => player.resources[res] >= cost[res]);
 const deductCost = (player, cost) => Object.keys(cost).forEach(res => player.resources[res] -= cost[res]);
@@ -66,7 +64,6 @@ const calculatePlayerPopCap = (player, game) => {
         .reduce((sum, b) => sum + GAME_CONFIG.BUILDINGS[b.type].provides_pop, 0);
 };
 
-// --- FOG OF WAR LOGIKA ---
 const FOW_STATE = { HIDDEN: 0, EXPLORED: 1, VISIBLE: 2 };
 
 function updateVisibility(game) {
@@ -109,7 +106,6 @@ function updateVisibility(game) {
     });
 }
 
-// --- HLAVNÍ HERNÍ SMYČKA ---
 function gameTick(gameCode) {
     const game = games[gameCode];
     if (!game || game.status !== 'running') return;
@@ -182,7 +178,7 @@ function createPlayerUpdatePacket(game, playerId) {
     });
 
     Object.values(game.buildings).forEach(b => {
-         if (isVisible(b.x, b.y)) {
+         if (isVisible(b.x + 1.5, b.y + 1.5)) {
             packet.buildings.push({ id: b.id, ownerId: b.ownerId, type: b.type, x: b.x, y: b.y, hp: b.hp, maxHp: b.maxHp, buildProgress: b.buildProgress, trainingQueue: b.trainingQueue.map(i => ({unitType: i.unitType, progress: i.progress})) });
         }
     });
@@ -196,13 +192,10 @@ function createPlayerUpdatePacket(game, playerId) {
     return packet;
 }
 
-// --- MODULY HERNÍ LOGIKY ---
-
 function updateResourceProduction(game, deltaTime) {
     game.players.forEach(p => {
         const production = { gold: 0, food: 0, wood: 0, stone: 0, science: 0 };
         const upkeep = { food: 0 };
-
         Object.values(game.buildings).filter(b => b.ownerId === p.id && b.buildProgress === 1).forEach(b => {
             const b_config = GAME_CONFIG.BUILDINGS[b.type];
             if (b_config.production) {
@@ -211,19 +204,14 @@ function updateResourceProduction(game, deltaTime) {
                 }
             }
         });
-        
         if (p.techs.has('vylepsene_zemedelstvi')) production.food *= (1 + GAME_CONFIG.TECH_TREE.vylepsene_zemedelstvi.effect.food_prod_modifier);
-        
         Object.values(p.units).forEach(u => upkeep.food += GAME_CONFIG.UNITS[u.type].upkeep.food || 0);
-
         p.resources.gold += production.gold * deltaTime;
         p.resources.food += (production.food - upkeep.food) * deltaTime;
         p.resources.wood += production.wood * deltaTime;
         p.resources.stone += production.stone * deltaTime;
         p.resources.science += production.science * deltaTime;
-
         if (p.resources.food < 0) p.resources.food = 0;
-        
         game.dirtyData.players.add(p.id);
     });
 }
@@ -236,7 +224,6 @@ function updateBuildingConstruction(game, deltaTime) {
                 b.buildProgress = 1;
                 b.hp = GAME_CONFIG.BUILDINGS[b.type].hp;
                 game.dirtyData.events.push({ type: 'SFX', name: 'construction_complete', pos: {x: b.x, y: b.y} });
-                
                 const owner = game.players.find(p => p.id === b.ownerId);
                 if (owner && GAME_CONFIG.BUILDINGS[b.type].provides_pop) {
                     calculatePlayerPopCap(owner, game);
@@ -272,23 +259,19 @@ function updateUnitTraining(game, deltaTime) {
 function updateUnitMovement(game, deltaTime) {
     Object.values(game.units).forEach(u => {
         if (!u.moveTarget) return;
-
         const dx = u.moveTarget.x - u.x;
         const dy = u.moveTarget.y - u.y;
         const dist = Math.hypot(dx, dy);
-
         if (dist < 0.5) {
             u.moveTarget = null;
             return;
         }
-        
         const gridX = Math.floor(u.x);
         const gridY = Math.floor(u.y);
         const terrainType = game.board[gridY]?.[gridX] || 'PLAINS';
         const unitConf = GAME_CONFIG.UNITS[u.type];
         const speedModifier = 1 / (GAME_CONFIG.TERRAIN[terrainType]?.movement_cost || 1);
         const speed = unitConf.speed * speedModifier;
-
         u.x += (dx / dist) * speed * deltaTime;
         u.y += (dy / dist) * speed * deltaTime;
         game.dirtyData.units.add(u.id);
@@ -331,12 +314,9 @@ function updateCombat(game, deltaTime) {
                     const modifier = GAME_CONFIG.RPS_MODIFIERS[u.type]?.[target.type] || 1;
                     const damage = u_conf.attack * modifier;
                     target.hp -= damage;
-                    
                     game.dirtyData.events.push({ type: 'ATTACK_EFFECT', from: {x: u.x, y: u.y}, to: {x: target.x, y: target.y}, unitType: u.type });
                     game.dirtyData.units.add(target.id);
-                    
                     u.attackCooldown = 1 / u_conf.attack_speed;
-
                     if (target.hp <= 0) deadUnits.add(target.id);
                 }
             } else { 
@@ -374,7 +354,6 @@ function createUnit(game, player, unitType, pos) {
     return newUnit;
 }
 
-// --- LOGIKA AKCÍ HRÁČE ---
 function handlePlayerAction(socket, action) {
     const game = games[socket.gameCode];
     if (!game || game.status !== 'running') return;
@@ -454,12 +433,9 @@ function handlePlayerAction(socket, action) {
     }
 }
 
-
-// --- LOBBY A INICIALIZACE ---
 function generateMap(size) {
     let board = Array.from({ length: size }, () => Array(size));
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) board[y][x] = 'PLAINS';
-    
     const placeFeature = (type, count, minR, maxR) => {
         for(let i=0; i<count; i++) {
             const cx = Math.random() * size; const cy = Math.random() * size; const r = minR + Math.random() * (maxR - minR);
@@ -491,8 +467,8 @@ function initializeGame(game) {
 
     game.players.forEach((player, index) => {
         game.visibilityMaps[player.id] = new Uint8Array(GAME_CONFIG.GRID_SIZE * GAME_CONFIG.GRID_SIZE).fill(FOW_STATE.HIDDEN);
-
         const pos = startPositions[index % startPositions.length];
+        player.startPos = pos;
         player.resources = { ...GAME_CONFIG.INITIAL_RESOURCES };
         player.units = {};
         player.pop = { current: 0, cap: 0 };
@@ -516,7 +492,7 @@ function initializeGame(game) {
     const initialPacket = {
         gameCode: game.code,
         config: { GRID_SIZE: GAME_CONFIG.GRID_SIZE, TERRAIN: GAME_CONFIG.TERRAIN, UNITS: GAME_CONFIG.UNITS, BUILDINGS: GAME_CONFIG.BUILDINGS },
-        players: game.players.map(p => ({ id: p.id, name: p.name, color: p.color })),
+        players: game.players.map(p => ({ id: p.id, name: p.name, color: p.color, startPos: p.startPos })),
         board: game.board,
     };
     
@@ -524,7 +500,6 @@ function initializeGame(game) {
     game.gameInterval = setInterval(() => gameTick(game.code), GAME_CONFIG.TICK_RATE);
 }
 
-// --- SOCKET.IO HANDLERY ---
 io.on('connection', (socket) => {
     socket.playerInfo = { id: socket.id, name: 'Anonym' };
 
@@ -533,20 +508,22 @@ io.on('connection', (socket) => {
         if (!game) return;
         socket.leave(gameCode);
         game.sockets = game.sockets.filter(s => s.id !== socket.id);
-        game.players = game.players.filter(p => p.id !== socket.id);
+        const playerIndex = game.players.findIndex(p => p.id === socket.id);
+        if (playerIndex > -1) game.players.splice(playerIndex, 1);
         if (game.players.length === 0 && game.status === 'lobby') {
-            console.log(`Lobby ${gameCode} is empty, deleting.`);
             delete games[gameCode];
         } else {
+            if (socket.id === game.hostId && game.players.length > 0) {
+                game.hostId = game.players[0].id;
+            }
             io.to(gameCode).emit('lobbyUpdate', { players: game.players, hostId: game.hostId });
         }
     };
 
     socket.on('setPlayerName', name => socket.playerInfo.name = name.substring(0, 20));
 
-    socket.on('createLobby', ({ isPrivate }) => {
+    const createLobby = (isPrivate, isSolo = false) => {
         const gameCode = createId();
-        console.log(`Player ${socket.playerInfo.name} (${socket.id}) creating ${isPrivate ? 'private' : 'public'} lobby: ${gameCode}`);
         const game = {
             code: gameCode, status: 'lobby', isPrivate: isPrivate,
             sockets: [socket], players: [socket.playerInfo], hostId: socket.id,
@@ -555,21 +532,27 @@ io.on('connection', (socket) => {
         games[gameCode] = game;
         socket.join(gameCode);
         socket.gameCode = gameCode;
-        socket.emit('lobbyCreated', { gameCode, hostId: socket.id });
-    });
+        socket.emit('lobbyJoined', { gameCode: game.code, players: game.players, hostId: game.hostId });
+        if (isSolo) {
+            initializeGame(game);
+        }
+    };
+
+    socket.on('createPrivateLobby', () => createLobby(true));
+    socket.on('createSoloGame', () => createLobby(true, true));
 
     socket.on('joinLobby', (gameCode) => {
         const game = games[gameCode];
         if (game && game.status === 'lobby') {
-            if (game.players.some(p => p.id === socket.id)) return; // Already in lobby
+            if (game.players.some(p => p.id === socket.id)) return;
             if (game.players.length >= GAME_CONFIG.PLAYER_COLORS.length) {
                 return socket.emit('gameError', { message: 'Lobby je plné.' });
             }
-            console.log(`Player ${socket.playerInfo.name} (${socket.id}) joining lobby: ${gameCode}`);
             socket.join(gameCode);
             socket.gameCode = gameCode;
             game.sockets.push(socket);
             game.players.push(socket.playerInfo);
+            socket.emit('lobbyJoined', { gameCode: game.code, players: game.players, hostId: game.hostId });
             io.to(gameCode).emit('lobbyUpdate', { players: game.players, hostId: game.hostId });
         } else {
             socket.emit('gameError', { message: 'Lobby neexistuje nebo hra již běží.' });
@@ -578,22 +561,10 @@ io.on('connection', (socket) => {
 
     socket.on('findPublicLobby', () => {
         let availableLobby = Object.values(games).find(g => !g.isPrivate && g.status === 'lobby' && g.players.length < GAME_CONFIG.PLAYER_COLORS.length);
-        
         if (availableLobby) {
-            console.log(`Found public lobby ${availableLobby.code} for ${socket.playerInfo.name}`);
-            socket.emit('lobbyFound', availableLobby.code);
+            socket.emit('joinLobby', availableLobby.code);
         } else {
-            console.log(`No public lobby found, creating one for ${socket.playerInfo.name}`);
-            const gameCode = createId();
-            const game = {
-                code: gameCode, status: 'lobby', isPrivate: false,
-                sockets: [socket], players: [socket.playerInfo], hostId: socket.id,
-                gameInterval: null
-            };
-            games[gameCode] = game;
-            socket.join(gameCode);
-            socket.gameCode = gameCode;
-            socket.emit('lobbyCreated', { gameCode, hostId: socket.id });
+            createLobby(false);
         }
     });
     
@@ -607,7 +578,6 @@ io.on('connection', (socket) => {
     socket.on('playerAction', (action) => handlePlayerAction(socket, action));
 
     socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
         if (socket.gameCode) {
             const game = games[socket.gameCode];
             if(game) {
@@ -626,4 +596,4 @@ io.on('connection', (socket) => {
 app.use(express.static(path.join(__dirname, 'public')));
 server.listen(PORT, () => console.log(`Server Avalon běží na portu ${PORT}`));
 
-// --- END OF FILE server.js (Finální opravená verze) ---
+// --- END OF FILE server.js (Definitivní oprava) ---
