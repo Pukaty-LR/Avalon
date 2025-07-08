@@ -41,26 +41,40 @@ document.addEventListener('DOMContentLoaded', () => {
     viewportEl.addEventListener('wheel', (e) => { e.preventDefault(); const rect = viewportEl.getBoundingClientRect(); const mouseX = e.clientX - rect.left; const mouseY = e.clientY - rect.top; const oldScale = scale; scale -= e.deltaY * 0.001 * scale; scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale)); gridPos.x = mouseX - (mouseX - gridPos.x) * (scale / oldScale); gridPos.y = mouseY - (mouseY - gridPos.y) * (scale / oldScale); updateGridTransform(); }, { passive: false });
     function updateGridTransform() { gridEl.style.transform = `translate(${gridPos.x}px, ${gridPos.y}px) scale(${scale})`; }
 
-    // --- Posluchači ---
+    // --- HLAVNÍ POSLUCHAČI ---
     socket.on('connect', () => { myId = socket.id; });
+    
     socket.on('gameStateUpdate', (updatePacket) => {
+        // Jednoduše aktualizujeme data
         gameState.players = updatePacket.players;
         gameState.expeditions = updatePacket.expeditions;
+        
         updatePacket.boardChanges.forEach(change => {
             if(gameState.gameBoard[change.y]?.[change.x]){
                 gameState.gameBoard[change.y][change.x].ownerId = change.ownerId;
-                updateCellVisual(gameState.gameBoard[change.y][change.x]);
             }
         });
-        requestAnimationFrame(renderUI);
-        requestAnimationFrame(renderMinimap);
     });
+
+    // --- HLAVNÍ VYKRESLOVACÍ SMYČKA ---
+    function gameLoop() {
+        if (!gameState || !myId) {
+            requestAnimationFrame(gameLoop);
+            return;
+        }
+        
+        // Vykreslíme vždy vše, ale efektivně
+        renderBoard();
+        renderMinimap();
+        renderUI();
+
+        requestAnimationFrame(gameLoop);
+    }
 
     function initialize() {
         createGrid(gameState.gridSize);
-        gameState.gameBoard.forEach(row => row.forEach(cellData => updateCellVisual(cellData)));
-        renderUI();
-        renderMinimap();
+        // Start hlavní smyčky
+        gameLoop();
     }
     
     function createGrid(size) {
@@ -76,17 +90,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 cells[y][x] = cellEl;
             }
         }
+        // Vykreslení počátečního stavu
+        gameState.gameBoard.forEach(row => row.forEach(cellData => updateCellVisual(cellData)));
     }
-
+    
     function updateCellVisual(cellData) {
         if(!cellData) return;
-        const cellEl = cells[cellData.y][cellData.x];
+        const cellEl = cells[cellData.y]?.[cellData.x];
+        if(!cellEl) return;
         let ownerColor = '#282828';
         if (cellData.ownerId) {
             const owner = gameState.players.find(p => p.id === cellData.ownerId);
             if (owner) ownerColor = owner.color;
         }
-        cellEl.style.backgroundColor = ownerColor;
+        // Kontrola, zda je potřeba změnit barvu, pro optimalizaci
+        if(cellEl.style.backgroundColor !== ownerColor) {
+            cellEl.style.backgroundColor = ownerColor;
+        }
+    }
+
+    function renderBoard() {
+        // Vykreslíme pouze změněné buňky
+         gameState.gameBoard.forEach(row => {
+            row.forEach(cellData => {
+                updateCellVisual(cellData);
+            });
+        });
     }
 
     function renderMinimap() {
@@ -97,13 +126,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         gameState.players.forEach(player => {
             minimapCtx.fillStyle = player.color;
-            gameState.gameBoard.forEach(row => {
-                row.forEach(cell => {
-                    if (cell.ownerId === player.id) {
-                        minimapCtx.fillRect(cell.x * pixelSize, cell.y * pixelSize, 1, 1);
+            for(let y=0; y < size; y++){
+                for(let x=0; x < size; x++){
+                    if(gameState.gameBoard[y][x].ownerId === player.id){
+                         minimapCtx.fillRect(x * pixelSize, y * pixelSize, 1, 1);
                     }
-                });
-            });
+                }
+            }
         });
     }
 
@@ -146,5 +175,6 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.emit('launchExpedition', { gameCode, target: { x: targetX, y: targetY }, units: unitsToSend });
     });
     
+    // --- Spuštění ---
     initialize();
 });
