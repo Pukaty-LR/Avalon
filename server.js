@@ -1,4 +1,4 @@
-// --- START OF FILE server.js ---
+// --- START OF FILE server.js (Opraveno) ---
 
 const http = require('http');
 const express = require('express');
@@ -527,7 +527,9 @@ io.on('connection', (socket) => {
     });
 });
 
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// ZMĚNA ZDE: Cesta je nyní správně do složky 'public'
+app.use(express.static(path.join(__dirname, 'public')));
+
 server.listen(PORT, () => console.log(`Server Avalon běží na portu ${PORT}`));
 
-// --- END OF FILE server.js ---
+// --- END OF FILE server.js (Opraveno) ---
