@@ -8,8 +8,18 @@ body { font-family: 'Segoe UI', sans-serif; background-color: #000; color: var(-
 .game-column, .info-column { display: flex; flex-direction: column; align-items: center; z-index: 10; }
 h1,h2,h3 { color: #3d9440; font-size: 1.5em; }
 #game-viewport { width: 80vw; height: 95vh; border: 2px solid var(--color-ui-border); overflow: hidden; position: relative; background-color: #111; }
-#game-grid { position: absolute; display: grid; grid-template-columns: repeat(var(--grid-size), var(--cell-size)); grid-template-rows: repeat(var(--grid-size), var(--cell-size)); gap: var(--gap-size); background-color: #444; cursor: grab; transform-origin: 0 0; }
-#game-grid:active { cursor: grabbing; }
+
+/* NOVÝ STYL PRO HERNÍ PLÁTNO */
+#game-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    cursor: grab;
+}
+#game-canvas:active {
+    cursor: grabbing;
+}
+
 .stats-panel { width: 280px; padding: 15px; background-color: var(--color-ui-bg); border: 2px solid var(--color-ui-border); margin-bottom: 20px; box-sizing: border-box;}
 .stats-panel h2 { margin: 0 0 15px 0; text-align: center; border-bottom: 1px solid #444; padding-bottom: 10px; font-size: 1.2em;}
 .stat { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 1.1em; }
@@ -22,7 +32,6 @@ h1,h2,h3 { color: #3d9440; font-size: 1.5em; }
 .stat-slider label { display: block; margin-bottom: 8px; }
 #expedition-slider { width: 100%; }
 #expedition-slider-value { display: block; text-align: center; margin-top: 5px; }
-.cell { width: var(--cell-size); height: var(--cell-size); position: relative; user-select: none; transition: background-color 0.1s linear; }
 .log-container { width: 280px; height: 180px; overflow-y: auto; font-size: 0.9em; background-color: var(--color-ui-bg); border: 2px solid var(--color-ui-border); padding: 15px; box-sizing: border-box;}
 .minimap-panel { width: 280px; padding: 15px; background-color: var(--color-ui-bg); border: 2px solid var(--color-ui-border); margin-bottom: 20px; text-align: center; box-sizing: border-box; }
 .minimap-panel h3 { margin: 0 0 10px 0; }
