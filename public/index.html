@@ -48,6 +48,7 @@
         const playerNameInput = document.getElementById('playerName');
         
         let playerName = '';
+        let initialGameState = null; // Místo pro uložení dat
 
         enterLobbyBtn.addEventListener('click', () => {
             playerName = playerNameInput.value;
@@ -64,7 +65,11 @@
             const code = document.getElementById('gameCodeInput').value;
             if (code) socket.emit('joinGame', code);
         });
-        startGameBtn.addEventListener('click', () => socket.emit('startGame'));
+        startGameBtn.addEventListener('click', () => {
+            // Zobrazíme "Hra se spouští..." hned, aby hráč věděl, že se něco děje
+            document.body.innerHTML = '<h1>Hra se spouští...</h1>';
+            socket.emit('startGame');
+        });
 
         socket.on('gameCreated', (gameCode) => {
             gameSelection.style.display = 'none';
@@ -94,14 +99,28 @@
             startGameBtn.disabled = players.length < 2;
         });
         
-        socket.on('gameStarting', () => {
-            document.body.innerHTML = '<h1>Hra se spouští...</h1>';
+        // KROK 1: Uložíme si data, až přijdou.
+        socket.on('initialGameState', (state) => {
+            initialGameState = state;
+            // Pokud jsme už dostali pokyn ke startu, přesměrujeme se
+            if (document.body.innerHTML.includes('<h1>Hra se spouští...</h1>')) {
+                proceedToGame();
+            }
         });
         
-        socket.on('initialGameState', (initialState) => {
-            sessionStorage.setItem('initialGameState', JSON.stringify(initialState));
-            window.location.href = `/hra.html?gameCode=${initialState.code}`;
+        // KROK 2: Až přijde pokyn ke startu, zkontrolujeme, jestli už máme data
+        socket.on('gameStarting', () => {
+            document.body.innerHTML = '<h1>Hra se spouští...</h1>';
+            // Pokud už máme data, přesměrujeme se. Pokud ne, počkáme, až dorazí.
+            if (initialGameState) {
+                proceedToGame();
+            }
         });
+
+        function proceedToGame() {
+            sessionStorage.setItem('initialGameState', JSON.stringify(initialGameState));
+            window.location.href = `/hra.html?gameCode=${initialGameState.code}`;
+        }
 
         socket.on('error', (message) => alert('Chyba: ' + message));
     </script>
