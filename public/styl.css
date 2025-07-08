@@ -1,4 +1,4 @@
-/* --- START OF FILE styl.css (Definitivní oprava) --- */
+/* --- START OF FILE styl.css (Absolutní finální verze) --- */
 :root {
     --color-bg: #1e272e;
     --color-ui-bg: #34495e;
@@ -11,7 +11,6 @@
     --color-red: #e74c3c;
     --color-blue: #3498db;
     --color-yellow: #f1c40f;
-    
     --color-gold: #ffd700;
     --color-food: #e67e22;
     --color-wood: #8c5a2b;
@@ -57,7 +56,7 @@ body {
 .join-game-form input { margin: 0 10px 0 0; flex-grow: 1; }
 .join-game-form button { margin: 0; }
 #lobby-game-code { color: var(--color-yellow); font-family: 'Courier New', monospace; font-size: 1.2em; background: #2c3e50; padding: 5px 10px; border-radius: 3px;}
-#playerList { list-style: none; padding: 0; margin: 20px 0; }
+#playerList { list-style: none; padding: 0; margin: 20px 0; max-height: 200px; overflow-y: auto; }
 #playerList li { background-color: var(--color-ui-bg-light); margin: 5px 0; padding: 10px; border-radius: 3px; text-align: left; padding-left: 15px;}
 #playerList li.host { font-weight: bold; border-left: 4px solid var(--color-accent); }
 #waiting-message { color: var(--color-text-muted); }
@@ -125,4 +124,4 @@ body {
     box-sizing: border-box;
 }
 
-/* --- END OF FILE styl.css (Definitivní oprava) --- */
+/* --- END OF FILE styl.css (Absolutní finální verze) --- */

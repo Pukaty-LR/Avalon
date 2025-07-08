@@ -1,4 +1,4 @@
-<!-- START OF FILE index.html (Definitivní oprava) -->
+<!-- START OF FILE index.html (Absolutní finální verze) -->
 
 <!DOCTYPE html>
 <html lang="cs">
@@ -104,28 +104,24 @@
             document.getElementById(`${screenName}-section`).style.display = 'flex';
         };
 
-        const setPlayerName = () => {
-            const name = playerNameInput.value.trim();
-            if (name) {
-                socket.emit('setPlayerName', name);
-                return true;
-            }
-            alert('Zadej prosím jméno svého rodu!');
-            return false;
-        };
+        const preActionNameSet = () => socket.emit('setPlayerName', playerNameInput.value);
 
         document.getElementById('soloGameBtn').addEventListener('click', () => {
-            if (setPlayerName()) socket.emit('createSoloGame');
+            preActionNameSet();
+            socket.emit('createLobby', { isPrivate: true, isSolo: true });
         });
         document.getElementById('findGameBtn').addEventListener('click', () => {
-            if (setPlayerName()) socket.emit('findPublicLobby');
+            preActionNameSet();
+            socket.emit('findPublicLobby');
         });
         document.getElementById('createGameBtn').addEventListener('click', () => {
-            if (setPlayerName()) socket.emit('createPrivateLobby');
+            preActionNameSet();
+            socket.emit('createLobby', { isPrivate: true, isSolo: false });
         });
         document.getElementById('joinGameBtn').addEventListener('click', () => {
             const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
-            if (code && setPlayerName()) {
+            if (code) {
+                preActionNameSet();
                 socket.emit('joinLobby', code);
             }
         });
@@ -142,9 +138,7 @@
         const updateLobbyView = (data) => {
             gameState = { gameCode: data.gameCode };
             document.getElementById('lobby-game-code').textContent = data.gameCode;
-            const playerList = document.getElementById('playerList');
-            playerList.innerHTML = data.players.map(p => `<li class="${p.id === data.hostId ? 'host' : ''}">${p.name} ${p.id === data.hostId ? '(Host)' : ''}</li>`).join('');
-            
+            document.getElementById('playerList').innerHTML = data.players.map(p => `<li class="${p.id === data.hostId ? 'host' : ''}">${p.name} ${p.id === data.hostId ? '(Host)' : ''}</li>`).join('');
             const startBtn = document.getElementById('startGameBtn');
             const waitingMsg = document.getElementById('waiting-message');
             if (myId === data.hostId) {
@@ -156,7 +150,6 @@
             }
             showScreen('lobby');
         };
-        
         socket.on('lobbyJoined', updateLobbyView);
         socket.on('lobbyUpdate', updateLobbyView);
 
@@ -168,16 +161,13 @@
                 buildings: new Map(),
                 effects: []
             };
-            
             visibilityMap = new Uint8Array(gameState.config.GRID_SIZE * gameState.config.GRID_SIZE).fill(FOW_STATE.HIDDEN);
-            
             const myPlayer = gameState.players.get(myId);
             if (myPlayer && myPlayer.startPos) {
                 const startPos = myPlayer.startPos;
                 camera.x = -startPos.x * CELL_SIZE * camera.scale + entityCanvas.width / 2;
                 camera.y = -startPos.y * CELL_SIZE * camera.scale + entityCanvas.height / 2;
             }
-
             showScreen('game');
             resizeCanvas();
             renderFOW();
@@ -187,12 +177,10 @@
 
         socket.on('gameStateUpdate', (update) => {
             if (!gameState) return;
-            
             update.players?.forEach(pData => {
                 const player = gameState.players.get(pData.id);
                 if (player) Object.assign(player, pData);
             });
-
             let fowChanged = false;
             if (update.visibilityChanges?.length > 0) {
                 fowChanged = true;
@@ -200,21 +188,15 @@
                     visibilityMap[cell.y * gameState.config.GRID_SIZE + cell.x] = cell.state;
                 });
             }
-
-            const visibleUnits = new Map(update.units.map(u => [u.id, u]));
-            const visibleBuildings = new Map(update.buildings.map(b => [b.id, b]));
-            gameState.units = visibleUnits;
-            gameState.buildings = visibleBuildings;
-
+            gameState.units = new Map(update.units.map(u => [u.id, u]));
+            gameState.buildings = new Map(update.buildings.map(b => [b.id, b]));
             update.events?.forEach(event => {
                 if (event.type === 'UNITS_DIED') {
                     event.ids.forEach(id => selectedUnits.delete(id));
-                }
-                if (event.type === 'ATTACK_EFFECT') {
+                } else if (event.type === 'ATTACK_EFFECT') {
                     gameState.effects.push({ ...event, duration: 0.3, maxDuration: 0.3 });
                 }
             });
-
             updateUI();
             if (selectedBuilding || selectedUnits.size > 0) updateSelectionPanel();
             if (fowChanged) {
@@ -248,13 +230,11 @@
             const startY = Math.floor(-camera.y / (CELL_SIZE * camera.scale));
             const endX = startX + Math.ceil(entityCanvas.width / (CELL_SIZE * camera.scale)) + 1;
             const endY = startY + Math.ceil(entityCanvas.height / (CELL_SIZE * camera.scale)) + 1;
-
             for (let y = Math.max(0, startY); y < Math.min(GRID_SIZE, endY); y++) {
                 for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
                      const state = visibilityMap[y * GRID_SIZE + x];
                      if (state === FOW_STATE.VISIBLE || state === FOW_STATE.EXPLORED) {
-                        const type = gameState.board[y][x];
-                        ctx.fillStyle = TERRAIN[type]?.color || '#000';
+                        ctx.fillStyle = TERRAIN[gameState.board[y][x]]?.color || '#000';
                         ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
                      }
                 }
@@ -267,9 +247,7 @@
             fowCtx.save();
             fowCtx.translate(camera.x, camera.y);
             fowCtx.scale(camera.scale, camera.scale);
-            const GRID_SIZE = gameState.config.GRID_SIZE;
-            const exploredColor = "rgba(0, 0, 0, 0.5)";
-            const hiddenColor = "black";
+            const { GRID_SIZE } = gameState.config;
             const startX = Math.floor(-camera.x / (CELL_SIZE * camera.scale));
             const startY = Math.floor(-camera.y / (CELL_SIZE * camera.scale));
             const endX = startX + Math.ceil(fowCanvas.width / (CELL_SIZE * camera.scale)) + 1;
@@ -278,10 +256,10 @@
                 for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
                      const state = visibilityMap[y * GRID_SIZE + x];
                      if (state === FOW_STATE.EXPLORED) {
-                        fowCtx.fillStyle = exploredColor;
+                        fowCtx.fillStyle = "rgba(0, 0, 0, 0.5)";
                         fowCtx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
                      } else if (state === FOW_STATE.HIDDEN) {
-                        fowCtx.fillStyle = hiddenColor;
+                        fowCtx.fillStyle = "black";
                         fowCtx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
                      }
                 }
@@ -296,9 +274,7 @@
                 ctx.fillRect(b.x * CELL_SIZE, b.y * CELL_SIZE, 3 * CELL_SIZE, 3 * CELL_SIZE);
                 ctx.strokeStyle = '#000';
                 ctx.strokeRect(b.x * CELL_SIZE, b.y * CELL_SIZE, 3 * CELL_SIZE, 3 * CELL_SIZE);
-                if (b.hp < b.maxHp) {
-                    drawHealthBar(ctx, b.x * CELL_SIZE, (b.y - 0.5) * CELL_SIZE, 3 * CELL_SIZE, 4 / camera.scale, b.hp / b.maxHp);
-                }
+                if (b.hp < b.maxHp) drawHealthBar(ctx, b.x * CELL_SIZE, (b.y - 0.5) * CELL_SIZE, 3 * CELL_SIZE, 4 / camera.scale, b.hp / b.maxHp);
                 if (selectedBuilding === b.id) {
                      ctx.strokeStyle = 'white';
                      ctx.lineWidth = 3 / camera.scale;
@@ -320,9 +296,7 @@
                      ctx.lineWidth = 2 / camera.scale;
                      ctx.stroke();
                 }
-                 if (u.hp < u.maxHp) {
-                    drawHealthBar(ctx, u.x * CELL_SIZE - CELL_SIZE, (u.y - 1) * CELL_SIZE, 2 * CELL_SIZE, 3 / camera.scale, u.hp / u.maxHp);
-                }
+                 if (u.hp < u.maxHp) drawHealthBar(ctx, u.x * CELL_SIZE - CELL_SIZE, (u.y - 1) * CELL_SIZE, 2 * CELL_SIZE, 3 / camera.scale, u.hp / u.maxHp);
             });
         }
         
@@ -368,8 +342,7 @@
                 for(let x = 0; x < size; x++) {
                     const state = visibilityMap[y * size + x];
                     if (state === FOW_STATE.VISIBLE || state === FOW_STATE.EXPLORED) {
-                        const type = gameState.board[y][x];
-                        minimapCtx.fillStyle = gameState.config.TERRAIN[type]?.color || 'black';
+                        minimapCtx.fillStyle = gameState.config.TERRAIN[gameState.board[y][x]]?.color || 'black';
                         if (state === FOW_STATE.EXPLORED) minimapCtx.globalAlpha = 0.5;
                         minimapCtx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
                         minimapCtx.globalAlpha = 1.0;
@@ -467,9 +440,7 @@
                 selectedBuilding = null;
                 let foundBuilding = null;
                 gameState.buildings.forEach(b => {
-                    if (worldPos.x >= b.x && worldPos.x <= b.x + 3 && worldPos.y >= b.y && worldPos.y <= b.y + 3) {
-                        foundBuilding = b;
-                    }
+                    if (worldPos.x >= b.x && worldPos.x <= b.x + 3 && worldPos.y >= b.y && worldPos.y <= b.y + 3) foundBuilding = b;
                 });
                 if(foundBuilding) {
                     if (foundBuilding.ownerId === myId) selectedBuilding = foundBuilding.id;
@@ -477,10 +448,7 @@
                     let closestUnit = null, minDistSq = 1;
                     gameState.units.forEach(u => {
                         const distSq = (u.x - worldPos.x)**2 + (u.y - worldPos.y)**2;
-                        if (distSq < minDistSq) {
-                            closestUnit = u;
-                            minDistSq = distSq;
-                        }
+                        if (distSq < minDistSq) { closestUnit = u; minDistSq = distSq; }
                     });
                     if (closestUnit && closestUnit.ownerId === myId) selectedUnits.add(closestUnit.id);
                 }
@@ -501,8 +469,7 @@
             let targetUnit = null;
             gameState.units.forEach(u => {
                 if(u.ownerId !== myId) {
-                    const distSq = (u.x - targetPos.x)**2 + (u.y - targetPos.y)**2;
-                    if(distSq < 1) targetUnit = u;
+                    if((u.x - targetPos.x)**2 + (u.y - targetPos.y)**2 < 1) targetUnit = u;
                 }
             });
             if (targetUnit) {
@@ -515,13 +482,13 @@
         let isDragging = false, dragStartPos = { x: 0, y: 0 };
         entityCanvas.addEventListener('mousedown', (e) => { if(e.button === 1) { isDragging = true; dragStartPos = { x: e.clientX - camera.x, y: e.clientY - camera.y }; } });
         entityCanvas.addEventListener('mousemove', (e) => {
-            const worldPos = getMouseWorldPos(e);
             if (isDragging) {
                 camera.x = e.clientX - dragStartPos.x;
                 camera.y = e.clientY - dragStartPos.y;
                 renderFOW();
             }
              if(placingBuildingType) {
+                const worldPos = getMouseWorldPos(e);
                 buildGhost.style.left = `${Math.floor(worldPos.x) * CELL_SIZE * camera.scale + camera.x}px`;
                 buildGhost.style.top = `${Math.floor(worldPos.y) * CELL_SIZE * camera.scale + camera.y}px`;
             }
@@ -531,24 +498,25 @@
         entityCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const mousePos = { x: e.clientX - entityCanvas.getBoundingClientRect().left, y: e.clientY - entityCanvas.getBoundingClientRect().top }; const zoom = e.deltaY < 0 ? 1.1 : 1 / 1.1; const newScale = Math.max(0.1, Math.min(camera.scale * zoom, 3.0)); const worldX = (mousePos.x - camera.x) / camera.scale; const worldY = (mousePos.y - camera.y) / camera.scale; camera.x = mousePos.x - worldX * newScale; camera.y = mousePos.y - worldY * newScale; camera.scale = newScale; if (placingBuildingType) { buildGhost.style.width = buildGhost.style.height = `${3 * CELL_SIZE * camera.scale}px`; } renderFOW(); }, { passive: false });
         
         document.getElementById('selection-actions').addEventListener('click', e => {
-            if (e.target.matches('.action-button')) {
-                if (e.target.dataset.action === 'train') {
-                    socket.emit('playerAction', { type: 'TRAIN_UNIT', payload: { buildingId: selectedBuilding, unitType: e.target.dataset.unit } });
+            const button = e.target.closest('.action-button');
+            if(button) {
+                if (button.dataset.action === 'train') {
+                    socket.emit('playerAction', { type: 'TRAIN_UNIT', payload: { buildingId: selectedBuilding, unitType: button.dataset.unit } });
+                } else if (button.classList.contains('build-button')) {
+                    placingBuildingType = button.dataset.structure;
+                    entityCanvas.style.cursor = 'copy';
+                    buildGhost.style.display = 'block';
+                    buildGhost.style.width = buildGhost.style.height = `${3 * CELL_SIZE * camera.scale}px`;
                 }
-            }
-             if (e.target.matches('.build-button')) {
-                placingBuildingType = e.target.dataset.structure;
-                entityCanvas.style.cursor = 'copy';
-                buildGhost.style.display = 'block';
-                buildGhost.style.width = buildGhost.style.height = `${3 * CELL_SIZE * camera.scale}px`;
             }
         });
 
         document.getElementById('tech-tree').addEventListener('click', e => {
-             if (e.target.matches('.tech-button')) {
-                socket.emit('playerAction', { type: 'RESEARCH_TECH', payload: { techId: e.target.dataset.tech } });
-                e.target.classList.add('researched');
-                e.target.disabled = true;
+             const button = e.target.closest('.tech-button');
+             if (button && !button.disabled) {
+                socket.emit('playerAction', { type: 'RESEARCH_TECH', payload: { techId: button.dataset.tech } });
+                button.classList.add('researched');
+                button.disabled = true;
              }
         });
 
@@ -567,4 +535,4 @@
     </script>
 </body>
 </html>
-<!-- END OF FILE index.html (Definitivní oprava) -->
+<!-- END OF FILE index.html (Absolutní finální verze) -->
