@@ -1,4 +1,4 @@
-<!-- START OF FILE index.html -->
+<!-- START OF FILE index.html (Kompletní finální verze) -->
 
 <!DOCTYPE html>
 <html lang="cs">
@@ -8,19 +8,30 @@
     <link rel="stylesheet" href="styl.css">
 </head>
 <body>
-    <!-- Sekce LOBBY -->
-    <div id="lobby-section">
-        <div class="lobby-container" id="name-selection">
+    <!-- Hlavní menu -->
+    <div id="main-menu-section" class="screen">
+        <div class="menu-container">
             <h1>AVALON</h1>
             <h2>Zrození Impéria</h2>
-            <input type="text" id="playerNameInput" placeholder="Jméno tvého rodu...">
-            <button id="findGameBtn">Vstoupit do války</button>
+            <input type="text" id="playerNameInput" placeholder="Jméno tvého rodu..." value="Vojevůdce">
+            <button id="soloGameBtn">Hra pro jednoho</button>
+            <button id="findGameBtn">Najít veřejnou hru</button>
+            <button id="createGameBtn">Vytvořit soukromou hru</button>
+            <div class="join-game-form">
+                <input type="text" id="joinCodeInput" placeholder="Kód hry...">
+                <button id="joinGameBtn">Připojit se</button>
+            </div>
         </div>
-        <div class="lobby-container" id="waiting-room" style="display: none;">
-            <h3>Formuje se bojiště...</h3>
-            <h4>Přítomní velitelé:</h4>
+    </div>
+    
+    <!-- Lobby / Čekárna -->
+    <div id="lobby-section" class="screen" style="display: none;">
+         <div class="lobby-container">
+            <h3>Čeká se na velitele...</h3>
+            <h4>Kód hry: <span id="lobby-game-code"></span></h4>
             <ul id="playerList"></ul>
-            <p id="waiting-message">Čekání na další hráče (2 potřeba)...</p>
+            <button id="startGameBtn" style="display:none;">Spustit Válku</button>
+            <p id="waiting-message">Čekání na hosta, aby spustil hru...</p>
         </div>
     </div>
 
@@ -43,6 +54,7 @@
             <div id="game-viewport">
                 <canvas id="board-canvas"></canvas>
                 <canvas id="entity-canvas"></canvas>
+                <canvas id="fow-canvas"></canvas>
                  <div id="build-ghost"></div>
             </div>
             <div class="right-panel">
@@ -79,67 +91,113 @@
         let myId = null;
         let animationFrameId = null;
         let camera = { x: 0, y: 0, scale: 0.5 };
-        const CELL_SIZE = 12; // Menší buňky pro detailnější pohled
+        const CELL_SIZE = 12;
         let selectedUnits = new Set();
         let selectedBuilding = null;
         let placingBuildingType = null;
+        const FOW_STATE = { HIDDEN: 0, EXPLORED: 1, VISIBLE: 2 };
+        let visibilityMap = null;
 
         // --- KANVAS A KONTEXTY ---
         const boardCanvas = document.getElementById('board-canvas');
         const boardCtx = boardCanvas.getContext('2d', { alpha: false });
         const entityCanvas = document.getElementById('entity-canvas');
         const entityCtx = entityCanvas.getContext('2d');
+        const fowCanvas = document.getElementById('fow-canvas');
+        const fowCtx = fowCanvas.getContext('2d');
         const minimapCanvas = document.getElementById('minimap');
         const minimapCtx = minimapCanvas.getContext('2d');
         
         // --- VÝBĚR ELEMENTŮ ---
-        const lobbySection = document.getElementById('lobby-section');
-        const gameSection = document.getElementById('game-section');
-        const findGameBtn = document.getElementById('findGameBtn');
         const playerNameInput = document.getElementById('playerNameInput');
         const buildGhost = document.getElementById('build-ghost');
-        const tooltip = document.getElementById('game-tooltip');
-
+        
         // --- PŘEPÍNÁNÍ POHLEDŮ ---
-        const showScreen = (screen) => {
-            document.getElementById('lobby-section').style.display = screen === 'lobby' ? 'flex' : 'none';
-            document.getElementById('game-section').style.display = screen === 'game' ? 'flex' : 'none';
+        const showScreen = (screenName) => {
+            document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
+            document.getElementById(`${screenName}-section`).style.display = 'flex';
         };
 
         // --- LOBBY LOGIKA ---
-        findGameBtn.addEventListener('click', () => {
-            const playerName = playerNameInput.value.trim() || 'Anonymní rod';
-            findGameBtn.disabled = true;
-            findGameBtn.textContent = 'Hledám bojiště...';
-            socket.emit('findGame', playerName);
-            document.getElementById('name-selection').style.display = 'none';
-            document.getElementById('waiting-room').style.display = 'block';
+        const setPlayerName = () => socket.emit('setPlayerName', playerNameInput.value.trim() || 'Anonym');
+
+        document.getElementById('soloGameBtn').addEventListener('click', () => {
+            setPlayerName();
+            socket.emit('createLobby', { isPrivate: true });
+            socket.once('lobbyCreated', ({ gameCode }) => {
+                socket.emit('startGame', gameCode);
+            });
+        });
+        document.getElementById('findGameBtn').addEventListener('click', () => {
+            setPlayerName();
+            socket.emit('findPublicLobby');
+        });
+        document.getElementById('createGameBtn').addEventListener('click', () => {
+            setPlayerName();
+            socket.emit('createLobby', { isPrivate: true });
+        });
+        document.getElementById('joinGameBtn').addEventListener('click', () => {
+            const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+            if (code) {
+                setPlayerName();
+                socket.emit('joinLobby', code);
+            }
+        });
+        document.getElementById('startGameBtn').addEventListener('click', () => {
+            if (gameState && gameState.gameCode) {
+                socket.emit('startGame', gameState.gameCode);
+            }
         });
 
-        socket.on('lobbyUpdate', (players) => {
-            document.getElementById('playerList').innerHTML = players.map(p => `<li>${p.name}</li>`).join('');
-            document.getElementById('waiting-message').textContent = `Čekání na další hráče (${players.length}/2)...`;
-        });
-
-        socket.on('connect', () => { myId = socket.id; showScreen('lobby'); });
-        socket.on('disconnect', () => { alert("Spojení se serverem Avalon bylo přerušeno."); cancelAnimationFrame(animationFrameId); showScreen('lobby'); });
+        socket.on('connect', () => { myId = socket.id; showScreen('main-menu'); });
+        socket.on('disconnect', () => { alert("Spojení se serverem Avalon bylo přerušeno."); cancelAnimationFrame(animationFrameId); location.reload(); });
         socket.on('gameError', (error) => { alert(`Chyba: ${error.message}`); });
+
+        socket.on('lobbyCreated', ({ gameCode }) => {
+            gameState = { gameCode };
+            document.getElementById('lobby-game-code').textContent = gameCode;
+            showScreen('lobby');
+        });
+        socket.on('lobbyFound', (gameCode) => {
+            setPlayerName();
+            socket.emit('joinLobby', gameCode);
+            gameState = { gameCode };
+            document.getElementById('lobby-game-code').textContent = gameCode;
+            showScreen('lobby');
+        });
+
+        socket.on('lobbyUpdate', ({ players, hostId }) => {
+            const playerList = document.getElementById('playerList');
+            playerList.innerHTML = players.map(p => `<li class="${p.id === hostId ? 'host' : ''}">${p.name} ${p.id === hostId ? '(Host)' : ''}</li>`).join('');
+            
+            const startBtn = document.getElementById('startGameBtn');
+            const waitingMsg = document.getElementById('waiting-message');
+            if(myId === hostId) {
+                startBtn.style.display = 'block';
+                waitingMsg.textContent = `Hra je připravena pro ${players.length} hráče.`;
+            } else {
+                startBtn.style.display = 'none';
+                waitingMsg.textContent = 'Čekání na hosta, aby spustil hru...';
+            }
+        });
 
         // --- HERNÍ LOGIKA ---
         socket.on('gameStarted', (initialPacket) => {
             console.log("AVALON ZAPOČAL:", initialPacket);
             gameState = {
-                config: initialPacket.config,
+                ...initialPacket,
                 players: new Map(initialPacket.players.map(p => [p.id, { ...p, resources: {}, pop: {current:0, cap:0}, techs: new Set() }])),
-                units: new Map(initialPacket.initialUnits.map(u => [u.id, u])),
-                buildings: new Map(initialPacket.initialBuildings.map(b => [b.id, b])),
-                board: initialPacket.initialBoard,
+                units: new Map(),
+                buildings: new Map(),
                 effects: []
             };
+            
+            visibilityMap = new Uint8Array(gameState.config.GRID_SIZE * gameState.config.GRID_SIZE).fill(FOW_STATE.HIDDEN);
             
             showScreen('game');
             resizeCanvas();
             renderFullBoard();
+            renderFOW();
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             gameLoop();
         });
@@ -147,14 +205,30 @@
         socket.on('gameStateUpdate', (update) => {
             if (!gameState) return;
             
-            update.players?.forEach(pData => Object.assign(gameState.players.get(pData.id) || {}, pData));
-            update.units?.forEach(uData => Object.assign(gameState.units.get(uData.id) || {}, uData));
-            update.buildings?.forEach(bData => Object.assign(gameState.buildings.get(bData.id) || {}, bData));
-            
+            update.players?.forEach(pData => {
+                const player = gameState.players.get(pData.id);
+                if (player) Object.assign(player, pData);
+            });
+
+            let fowChanged = false;
+            if (update.visibilityChanges?.length > 0) {
+                fowChanged = true;
+                update.visibilityChanges.forEach(cell => {
+                    visibilityMap[cell.y * gameState.config.GRID_SIZE + cell.x] = cell.state;
+                });
+            }
+
+            const visibleUnits = new Map(update.units.map(u => [u.id, u]));
+            const visibleBuildings = new Map(update.buildings.map(b => [b.id, b]));
+            gameState.units = visibleUnits;
+            gameState.buildings = visibleBuildings;
+
             update.events?.forEach(event => {
-                if (event.type === 'UNIT_CREATED') gameState.units.set(event.data.id, event.data);
-                if (event.type === 'BUILDING_CREATED') gameState.buildings.set(event.data.id, event.data);
-                if (event.type === 'UNITS_DIED') event.ids.forEach(id => gameState.units.delete(id));
+                if (event.type === 'UNITS_DIED') {
+                    event.ids.forEach(id => {
+                        if (selectedUnits.has(id)) selectedUnits.delete(id);
+                    });
+                }
                 if (event.type === 'ATTACK_EFFECT') {
                     gameState.effects.push({ ...event, duration: 0.3, maxDuration: 0.3 });
                 }
@@ -162,6 +236,16 @@
 
             updateUI();
             if (selectedBuilding || selectedUnits.size > 0) updateSelectionPanel();
+            if (fowChanged) {
+                renderFOW();
+                renderMinimap();
+            }
+        });
+        
+        socket.on('gameOver', ({reason}) => {
+             alert(`Konec hry! ${reason}`);
+             cancelAnimationFrame(animationFrameId);
+             location.reload();
         });
 
         // --- VYKRESLOVACÍ SMYČKA A FUNKCE ---
@@ -182,6 +266,9 @@
 
         function renderFullBoard() {
             if (!gameState) return;
+            boardCanvas.width = gameState.config.GRID_SIZE * CELL_SIZE;
+            boardCanvas.height = gameState.config.GRID_SIZE * CELL_SIZE;
+
             boardCtx.fillStyle = '#111';
             boardCtx.fillRect(0, 0, boardCanvas.width, boardCanvas.height);
             const { TERRAIN } = gameState.config;
@@ -197,16 +284,50 @@
             }
             renderMinimap();
         }
+
+        function renderFOW() {
+            if (!gameState || !visibilityMap) return;
+            fowCtx.clearRect(0, 0, fowCanvas.width, fowCanvas.height);
+            
+            const startX = Math.floor(-camera.x / camera.scale);
+            const startY = Math.floor(-camera.y / camera.scale);
+            const viewWidth = fowCanvas.width / camera.scale;
+            const viewHeight = fowCanvas.height / camera.scale;
+
+            fowCtx.save();
+            fowCtx.translate(camera.x, camera.y);
+            fowCtx.scale(camera.scale, camera.scale);
+
+            // This is an off-screen canvas for the full FoW map
+            const fowMapCanvas = document.createElement('canvas');
+            fowMapCanvas.width = gameState.config.GRID_SIZE * CELL_SIZE;
+            fowMapCanvas.height = gameState.config.GRID_SIZE * CELL_SIZE;
+            const fowMapCtx = fowMapCanvas.getContext('2d');
+
+            const exploredColor = "rgba(0, 0, 0, 0.5)";
+            const hiddenColor = "black";
+            const gridSize = gameState.config.GRID_SIZE;
+
+            for (let i = 0; i < visibilityMap.length; i++) {
+                const state = visibilityMap[i];
+                if (state !== FOW_STATE.VISIBLE) {
+                    const x = (i % gridSize) * CELL_SIZE;
+                    const y = Math.floor(i / gridSize) * CELL_SIZE;
+                    fowMapCtx.fillStyle = state === FOW_STATE.EXPLORED ? exploredColor : hiddenColor;
+                    fowMapCtx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                }
+            }
+            fowCtx.drawImage(fowMapCanvas, 0, 0);
+            fowCtx.restore();
+        }
         
         function renderEntities(ctx) {
-            // Budovy
             gameState.buildings.forEach(b => {
                 const pColor = gameState.players.get(b.ownerId)?.color || 'grey';
                 ctx.fillStyle = pColor;
                 ctx.fillRect(b.x * CELL_SIZE, b.y * CELL_SIZE, 3 * CELL_SIZE, 3 * CELL_SIZE);
                 ctx.strokeStyle = '#000';
                 ctx.strokeRect(b.x * CELL_SIZE, b.y * CELL_SIZE, 3 * CELL_SIZE, 3 * CELL_SIZE);
-                // Health bar
                 if (b.hp < b.maxHp) {
                     drawHealthBar(ctx, b.x * CELL_SIZE, (b.y-0.5) * CELL_SIZE, 3*CELL_SIZE, 4/camera.scale, b.hp / b.maxHp);
                 }
@@ -217,7 +338,6 @@
                 }
             });
 
-            // Jednotky
             gameState.units.forEach(u => {
                 const pColor = gameState.players.get(u.ownerId)?.color || 'grey';
                 ctx.fillStyle = pColor;
@@ -242,16 +362,16 @@
         function renderEffects(ctx) {
             ctx.lineWidth = 2 / camera.scale;
             gameState.effects = gameState.effects.filter(e => {
-                e.duration -= 1/60; // Přibližný deltaTime
+                e.duration -= 1/60;
                 if (e.duration <= 0) return false;
                 ctx.globalAlpha = e.duration / e.maxDuration;
-                if (e.unitType === 'LUCISTNIK') { // Střela
+                if (e.unitType === 'LUCISTNIK') {
                     ctx.strokeStyle = 'yellow';
                     ctx.beginPath();
                     ctx.moveTo(e.from.x * CELL_SIZE, e.from.y * CELL_SIZE);
                     ctx.lineTo(e.to.x * CELL_SIZE, e.to.y * CELL_SIZE);
                     ctx.stroke();
-                } else { // Melee
+                } else {
                     ctx.strokeStyle = 'red';
                     ctx.beginPath();
                     ctx.arc(e.to.x * CELL_SIZE, e.to.y * CELL_SIZE, CELL_SIZE * 0.5, 0, Math.PI * 2);
@@ -263,16 +383,50 @@
         }
 
         function drawHealthBar(ctx, x, y, width, height, progress) {
-            ctx.fillStyle = '#c0392b'; // Red background
+            ctx.fillStyle = '#c0392b';
             ctx.fillRect(x, y, width, height);
-            ctx.fillStyle = '#27ae60'; // Green foreground
+            ctx.fillStyle = '#27ae60';
             ctx.fillRect(x, y, width * progress, height);
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 0.5 / camera.scale;
             ctx.strokeRect(x,y,width, height);
         }
         
-        function renderMinimap() { /* ... bez větších změn, ale překreslíme ... */ }
+        function renderMinimap() {
+            if (!gameState) return;
+            const size = gameState.config.GRID_SIZE;
+            const pixelSize = minimapCanvas.width / size;
+            minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+            
+            for(let y = 0; y < size; y++) {
+                for(let x = 0; x < size; x++) {
+                    const state = visibilityMap[y * size + x];
+                    if (state === FOW_STATE.VISIBLE || state === FOW_STATE.EXPLORED) {
+                        const type = gameState.board[y][x];
+                        minimapCtx.fillStyle = gameState.config.TERRAIN[type]?.color || 'black';
+                        if (state === FOW_STATE.EXPLORED) {
+                            minimapCtx.globalAlpha = 0.5;
+                        }
+                        minimapCtx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+                        minimapCtx.globalAlpha = 1.0;
+                    }
+                }
+            }
+
+            gameState.players.forEach(p => {
+                minimapCtx.fillStyle = p.color;
+                gameState.units.forEach(u => {
+                    if (u.ownerId === p.id) {
+                         minimapCtx.fillRect(u.x * pixelSize, u.y * pixelSize, pixelSize, pixelSize);
+                    }
+                });
+                 gameState.buildings.forEach(b => {
+                    if (b.ownerId === p.id) {
+                         minimapCtx.fillRect(b.x * pixelSize, b.y * pixelSize, pixelSize * 2, pixelSize * 2);
+                    }
+                });
+            });
+        }
 
         function updateUI() {
             const me = gameState.players.get(myId);
@@ -293,7 +447,7 @@
             detailsEl.innerHTML = '';
             actionsEl.innerHTML = '';
 
-            if (selectedBuilding) {
+            if (selectedBuilding && gameState.buildings.has(selectedBuilding)) {
                 const b = gameState.buildings.get(selectedBuilding);
                 const b_conf = gameState.config.BUILDINGS[b.type];
                 nameEl.textContent = b_conf.name;
@@ -311,17 +465,20 @@
 
             } else if (selectedUnits.size > 0) {
                  if (selectedUnits.size === 1) {
-                    const unit = gameState.units.get(selectedUnits.values().next().value);
-                    const u_conf = gameState.config.UNITS[unit.type];
-                    nameEl.textContent = u_conf.name;
-                    detailsEl.innerHTML = `<p>HP: ${Math.ceil(unit.hp)} / ${unit.maxHp}</p>`;
-                    if (unit.can_build) {
-                       Object.entries(gameState.config.BUILDINGS).forEach(([key, conf]) => {
-                           if(conf.cost.wood) { // Zobrazit jen stavitelné budovy
-                               actionsEl.innerHTML += `<button class="action-button build-button" data-structure="${key}">${conf.name}</button>`;
-                           }
-                       });
-                    }
+                    const unitId = selectedUnits.values().next().value;
+                    if(gameState.units.has(unitId)) {
+                        const unit = gameState.units.get(unitId);
+                        const u_conf = gameState.config.UNITS[unit.type];
+                        nameEl.textContent = u_conf.name;
+                        detailsEl.innerHTML = `<p>HP: ${Math.ceil(unit.hp)} / ${unit.maxHp}</p>`;
+                        if (unit.can_build) {
+                           Object.entries(gameState.config.BUILDINGS).forEach(([key, conf]) => {
+                               if(conf.cost.wood || conf.cost.gold) {
+                                   actionsEl.innerHTML += `<button class="action-button build-button" data-structure="${key}">${conf.name}</button>`;
+                               }
+                           });
+                        }
+                    } else { selectedUnits.clear(); updateSelectionPanel(); }
                  } else {
                      nameEl.textContent = `${selectedUnits.size} jednotek`;
                  }
@@ -333,14 +490,14 @@
         // --- OVLÁDÁNÍ A VSTUPY ---
         function getMouseWorldPos(e) {
             const rect = entityCanvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left - camera.x) / camera.scale;
-            const y = (e.clientY - rect.top - camera.y) / camera.scale;
+            const x = (e.clientX - rect.left) / camera.scale - (camera.x / camera.scale);
+            const y = (e.clientY - rect.top) / camera.scale - (camera.y / camera.scale);
             return { x: x / CELL_SIZE, y: y / CELL_SIZE };
         }
 
         entityCanvas.addEventListener('mousedown', (e) => {
             const worldPos = getMouseWorldPos(e);
-            if (e.button === 0) { // Levý klik
+            if (e.button === 0) {
                 if (placingBuildingType) {
                     const builderId = Array.from(selectedUnits).find(id => gameState.units.get(id)?.can_build);
                     if(builderId) {
@@ -355,17 +512,15 @@
                 selectedUnits.clear();
                 selectedBuilding = null;
                 
-                // Zkusit vybrat budovu
                 let foundBuilding = null;
-                 gameState.buildings.forEach(b => {
-                     if (worldPos.x >= b.x && worldPos.x <= b.x + 3 && worldPos.y >= b.y && worldPos.y <= b.y + 3) {
-                         foundBuilding = b;
-                     }
-                 });
+                gameState.buildings.forEach(b => {
+                    if (worldPos.x >= b.x && worldPos.x <= b.x + 3 && worldPos.y >= b.y && worldPos.y <= b.y + 3) {
+                        foundBuilding = b;
+                    }
+                });
                 if(foundBuilding) {
                     if (foundBuilding.ownerId === myId) selectedBuilding = foundBuilding.id;
                 } else {
-                    // Vybrat jednotku
                     let closestUnit = null, minDistSq = 1;
                     gameState.units.forEach(u => {
                         const distSq = (u.x - worldPos.x)**2 + (u.y - worldPos.y)**2;
@@ -382,12 +537,18 @@
             }
         });
 
-        entityCanvas.addEventListener('contextmenu', (e) => { // Pravý klik
+        entityCanvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
+            if (placingBuildingType) {
+                placingBuildingType = null;
+                buildGhost.style.display = 'none';
+                entityCanvas.style.cursor = 'default';
+                return;
+            }
+
             if (selectedUnits.size === 0) return;
             const targetPos = getMouseWorldPos(e);
             
-            // Zkusit najít cíl útoku
             let targetUnit = null;
             gameState.units.forEach(u => {
                 if(u.ownerId !== myId) {
@@ -403,25 +564,25 @@
             }
         });
         
-        // --- Další event listenery (pohyb kamery, zoom) zůstávají podobné ---
-        // (zkráceno pro přehlednost)
         let isDragging = false, dragStartPos = { x: 0, y: 0 };
-        entityCanvas.addEventListener('mousedown', (e) => { if(e.button === 2 || (e.button === 0 && !e.ctrlKey && !placingBuildingType)) { isDragging = true; dragStartPos = { x: e.clientX - camera.x, y: e.clientY - camera.y }; } });
+        entityCanvas.addEventListener('mousedown', (e) => { if(e.button === 1 || (e.button === 0 && e.altKey)) { isDragging = true; dragStartPos = { x: e.clientX - camera.x, y: e.clientY - camera.y }; } });
         entityCanvas.addEventListener('mousemove', (e) => {
+            const worldPos = getMouseWorldPos(e);
             if (isDragging) {
                 camera.x = e.clientX - dragStartPos.x;
                 camera.y = e.clientY - dragStartPos.y;
+                renderFOW();
             }
              if(placingBuildingType) {
                 const rect = entityCanvas.getBoundingClientRect();
-                buildGhost.style.left = `${e.clientX - rect.left}px`;
-                buildGhost.style.top = `${e.clientY - rect.top}px`;
+                buildGhost.style.left = `${Math.floor(worldPos.x) * CELL_SIZE * camera.scale + camera.x}px`;
+                buildGhost.style.top = `${Math.floor(worldPos.y) * CELL_SIZE * camera.scale + camera.y}px`;
             }
         });
         entityCanvas.addEventListener('mouseup', () => { isDragging = false; });
-        entityCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const mousePos = { x: e.clientX - entityCanvas.getBoundingClientRect().left, y: e.clientY - entityCanvas.getBoundingClientRect().top }; const zoom = e.deltaY < 0 ? 1.1 : 1 / 1.1; const newScale = Math.max(0.1, Math.min(camera.scale * zoom, 5.0)); camera.x = mousePos.x - (mousePos.x - camera.x) * (newScale / camera.scale); camera.y = mousePos.y - (mousePos.y - camera.y) * (newScale / camera.scale); camera.scale = newScale; if (placingBuildingType) { buildGhost.style.width = buildGhost.style.height = `${3 * CELL_SIZE * camera.scale}px`; } }, { passive: false });
+        entityCanvas.addEventListener('mouseleave', () => { isDragging = false; });
+        entityCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const mousePos = { x: e.clientX - entityCanvas.getBoundingClientRect().left, y: e.clientY - entityCanvas.getBoundingClientRect().top }; const zoom = e.deltaY < 0 ? 1.1 : 1 / 1.1; const newScale = Math.max(0.1, Math.min(camera.scale * zoom, 3.0)); const worldX = (mousePos.x - camera.x) / camera.scale; const worldY = (mousePos.y - camera.y) / camera.scale; camera.x = mousePos.x - worldX * newScale; camera.y = mousePos.y - worldY * newScale; camera.scale = newScale; if (placingBuildingType) { buildGhost.style.width = buildGhost.style.height = `${3 * CELL_SIZE * camera.scale}px`; } renderFOW(); }, { passive: false });
         
-        // Dynamické listenery pro akční panel
         document.getElementById('selection-actions').addEventListener('click', e => {
             if (e.target.matches('.action-button')) {
                 const action = e.target.dataset.action;
@@ -447,14 +608,17 @@
 
         function resizeCanvas() {
             const viewport = document.getElementById('game-viewport');
-            [boardCanvas, entityCanvas].forEach(c => { c.width = viewport.clientWidth; c.height = viewport.clientHeight; });
+            [entityCanvas, fowCanvas].forEach(c => { c.width = viewport.clientWidth; c.height = viewport.clientHeight; });
             const minimapPanel = document.querySelector('.minimap-panel');
             minimapCanvas.width = minimapPanel.clientWidth - 30;
             minimapCanvas.height = minimapCanvas.width;
-            if(gameState) renderFullBoard();
+            if(gameState) {
+                renderFullBoard();
+                renderFOW();
+            }
         }
         window.addEventListener('resize', resizeCanvas);
     </script>
 </body>
 </html>
-<!-- END OF FILE index.html -->
+<!-- END OF FILE index.html (Kompletní finální verze) -->
