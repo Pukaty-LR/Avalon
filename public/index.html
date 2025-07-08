@@ -14,17 +14,18 @@
 
     <div class="lobby-container" id="game-selection" style="display: none;">
         <h2>Vítej, <span id="lobbyPlayerName"></span>!</h2>
-        <button id="createGameBtn">Vytvořit novou hru</button>
+        <button id="findGameBtn">Najít hru</button>
+        <button id="createGameBtn">Vytvořit soukromou hru</button>
         <div class="join-game">
             <input type="text" id="gameCodeInput" placeholder="Zadej kód hry...">
-            <button id="joinGameBtn">Připojit se do hry</button>
+            <button id="joinGameBtn">Připojit se kódem</button>
         </div>
     </div>
 
     <div class="lobby-container" id="waiting-room" style="display: none;">
         <h3>Čekárna</h3>
-        <p>Kód tvé hry je: <strong id="gameCodeDisplay"></strong></p>
-        <p>Pošli tento kód svým přátelům!</p>
+        <p>Kód tvé hry: <strong id="gameCodeDisplay"></strong></p>
+        <p>Pošli tento kód přátelům nebo počkej, až se někdo připojí.</p>
         <h4>Hráči v lobby:</h4>
         <ul id="playerList"></ul>
         <button id="startGameBtn" disabled>Spustit hru (min. 2 hráči)</button>
@@ -39,51 +40,31 @@
         const waitingRoom = document.getElementById('waiting-room');
 
         const enterLobbyBtn = document.getElementById('enterLobbyBtn');
+        const findGameBtn = document.getElementById('findGameBtn');
         const createGameBtn = document.getElementById('createGameBtn');
         const joinGameBtn = document.getElementById('joinGameBtn');
         const startGameBtn = document.getElementById('startGameBtn');
         
         const playerNameInput = document.getElementById('playerName');
-        const gameCodeInput = document.getElementById('gameCodeInput');
+        
+        let playerName = '';
 
-        let player = {};
-
-        // Vstup do lobby
         enterLobbyBtn.addEventListener('click', () => {
-            const playerName = playerNameInput.value;
-            if (!playerName) {
-                alert('Prosím, zadej jméno.');
-                return;
-            }
-            player.name = playerName;
+            playerName = playerNameInput.value;
+            if (!playerName) { alert('Zadej jméno.'); return; }
             socket.emit('playerEnteredLobby', playerName);
-            
             document.getElementById('lobbyPlayerName').textContent = playerName;
             nameSelection.style.display = 'none';
             gameSelection.style.display = 'block';
         });
 
-        // Vytvoření hry
-        createGameBtn.addEventListener('click', () => {
-            socket.emit('createGame');
-        });
-
-        // Připojení do hry
+        findGameBtn.addEventListener('click', () => socket.emit('findGame'));
+        createGameBtn.addEventListener('click', () => socket.emit('createGame'));
         joinGameBtn.addEventListener('click', () => {
-            const code = gameCodeInput.value;
-            if (!code) {
-                alert('Zadej kód hry.');
-                return;
-            }
-            socket.emit('joinGame', code);
+            const code = document.getElementById('gameCodeInput').value;
+            if (code) socket.emit('joinGame', code);
         });
-
-        // Spuštění hry (jen pro tvůrce)
-        startGameBtn.addEventListener('click', () => {
-            socket.emit('startGame');
-        });
-
-        // --- SOCKET.IO UDÁLOSTI ---
+        startGameBtn.addEventListener('click', () => socket.emit('startGame'));
 
         socket.on('gameCreated', (gameCode) => {
             gameSelection.style.display = 'none';
@@ -95,33 +76,34 @@
             gameSelection.style.display = 'none';
             waitingRoom.style.display = 'block';
             document.getElementById('gameCodeDisplay').textContent = gameCode;
-            startGameBtn.style.display = 'none'; // Jen host může spustit
         });
 
         socket.on('updatePlayerList', (players) => {
             const playerListEl = document.getElementById('playerList');
             playerListEl.innerHTML = '';
-            players.forEach(p => {
+            let meIsHost = false;
+            players.forEach((p, index) => {
                 const li = document.createElement('li');
-                li.textContent = p.name;
+                li.textContent = p.name + (index === 0 ? ' (Host)' : '');
                 playerListEl.appendChild(li);
+                if (p.id === socket.id && index === 0) {
+                    meIsHost = true;
+                }
             });
-            // Host může spustit hru, pokud jsou alespoň 2 hráči
-            if (players.length >= 2) {
-                startGameBtn.disabled = false;
-            } else {
-                startGameBtn.disabled = true;
-            }
+            startGameBtn.style.display = meIsHost ? 'block' : 'none';
+            startGameBtn.disabled = players.length < 2;
         });
         
-        socket.on('gameStarted', (gameCode) => {
-            // Přesměrujeme hráče na herní stránku
-            window.location.href = `/hra.html?gameCode=${gameCode}`;
+        socket.on('gameStarting', () => {
+            document.body.innerHTML = '<h1>Hra se spouští...</h1>';
+        });
+        
+        socket.on('initialGameState', (initialState) => {
+            sessionStorage.setItem('initialGameState', JSON.stringify(initialState));
+            window.location.href = `/hra.html?gameCode=${initialState.code}`;
         });
 
-        socket.on('error', (message) => {
-            alert('Chyba: ' + message);
-        });
+        socket.on('error', (message) => alert('Chyba: ' + message));
     </script>
 </body>
 </html>
