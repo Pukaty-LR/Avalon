@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Pixelová Říše - Lobby</title>
+    <link rel="stylesheet" href="styl.css">
+</head>
+<body>
+    <div class="lobby-container" id="name-selection">
+        <h1>Pixelová Říše</h1>
+        <input type="text" id="playerName" placeholder="Zadej své jméno...">
+        <button id="enterLobbyBtn">Vstoupit do lobby</button>
+    </div>
+
+    <div class="lobby-container" id="game-selection" style="display: none;">
+        <h2>Vítej, <span id="lobbyPlayerName"></span>!</h2>
+        <button id="createGameBtn">Vytvořit novou hru</button>
+        <div class="join-game">
+            <input type="text" id="gameCodeInput" placeholder="Zadej kód hry...">
+            <button id="joinGameBtn">Připojit se do hry</button>
+        </div>
+    </div>
+
+    <div class="lobby-container" id="waiting-room" style="display: none;">
+        <h3>Čekárna</h3>
+        <p>Kód tvé hry je: <strong id="gameCodeDisplay"></strong></p>
+        <p>Pošli tento kód svým přátelům!</p>
+        <h4>Hráči v lobby:</h4>
+        <ul id="playerList"></ul>
+        <button id="startGameBtn" disabled>Spustit hru (min. 2 hráči)</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        const nameSelection = document.getElementById('name-selection');
+        const gameSelection = document.getElementById('game-selection');
+        const waitingRoom = document.getElementById('waiting-room');
+
+        const enterLobbyBtn = document.getElementById('enterLobbyBtn');
+        const createGameBtn = document.getElementById('createGameBtn');
+        const joinGameBtn = document.getElementById('joinGameBtn');
+        const startGameBtn = document.getElementById('startGameBtn');
+        
+        const playerNameInput = document.getElementById('playerName');
+        const gameCodeInput = document.getElementById('gameCodeInput');
+
+        let player = {};
+
+        // Vstup do lobby
+        enterLobbyBtn.addEventListener('click', () => {
+            const playerName = playerNameInput.value;
+            if (!playerName) {
+                alert('Prosím, zadej jméno.');
+                return;
+            }
+            player.name = playerName;
+            socket.emit('playerEnteredLobby', playerName);
+            
+            document.getElementById('lobbyPlayerName').textContent = playerName;
+            nameSelection.style.display = 'none';
+            gameSelection.style.display = 'block';
+        });
+
+        // Vytvoření hry
+        createGameBtn.addEventListener('click', () => {
+            socket.emit('createGame');
+        });
+
+        // Připojení do hry
+        joinGameBtn.addEventListener('click', () => {
+            const code = gameCodeInput.value;
+            if (!code) {
+                alert('Zadej kód hry.');
+                return;
+            }
+            socket.emit('joinGame', code);
+        });
+
+        // Spuštění hry (jen pro tvůrce)
+        startGameBtn.addEventListener('click', () => {
+            socket.emit('startGame');
+        });
+
+        // --- SOCKET.IO UDÁLOSTI ---
+
+        socket.on('gameCreated', (gameCode) => {
+            gameSelection.style.display = 'none';
+            waitingRoom.style.display = 'block';
+            document.getElementById('gameCodeDisplay').textContent = gameCode;
+        });
+
+        socket.on('joinSuccess', (gameCode) => {
+            gameSelection.style.display = 'none';
+            waitingRoom.style.display = 'block';
+            document.getElementById('gameCodeDisplay').textContent = gameCode;
+            startGameBtn.style.display = 'none'; // Jen host může spustit
+        });
+
+        socket.on('updatePlayerList', (players) => {
+            const playerListEl = document.getElementById('playerList');
+            playerListEl.innerHTML = '';
+            players.forEach(p => {
+                const li = document.createElement('li');
+                li.textContent = p.name;
+                playerListEl.appendChild(li);
+            });
+            // Host může spustit hru, pokud jsou alespoň 2 hráči
+            if (players.length >= 2) {
+                startGameBtn.disabled = false;
+            } else {
+                startGameBtn.disabled = true;
+            }
+        });
+        
+        socket.on('gameStarted', (gameCode) => {
+            // Přesměrujeme hráče na herní stránku
+            window.location.href = `/hra.html?gameCode=${gameCode}`;
+        });
+
+        socket.on('error', (message) => {
+            alert('Chyba: ' + message);
+        });
+    </script>
+</body>
+</html>

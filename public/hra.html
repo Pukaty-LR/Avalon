@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixelová Říše - Multiplayer</title>
+    <link rel="stylesheet" href="hra-styl.css">
+</head>
+<body>
+    <div class="info-column">
+        <div class="stats-panel">
+            <h2 id="player-name-display" style="transition: color 0.5s;">STAV ŘÍŠE</h2>
+            <div class="stat"><span>💰 Zlato:</span> <span id="gold-display" class="stat-value">0</span></div>
+            <div class="stat"><span>💎 Krystaly:</span> <span id="crystals-display" class="stat-value">0</span></div>
+            <div class="stat"><span>⚔️ Jednotky:</span> <span id="units-display" class="stat-value">0</span></div>
+            <div class="stat"><span>🛰️ Expedice:</span> <span id="expeditions-display" class="stat-value">0</span></div>
+            <div class="stat"><span>🌍 Území:</span> <span id="territory-display" class="stat-value">0</span></div>
+            <button class="unit-buy-button" id="buy-unit-button">Koupit jednotku (50💰)</button>
+            <div class="stat-slider">
+                <label for="expedition-slider">Velikost expedice:</label>
+                <input type="range" id="expedition-slider" min="1" max="100" value="10">
+                <span id="expedition-slider-value">10% (0)</span>
+            </div>
+        </div>
+        <div class="minimap-panel">
+            <h3>Minimapa</h3>
+            <canvas id="minimap" width="280" height="280"></canvas>
+        </div>
+        <div class="log-container" id="log-container"></div>
+    </div>
+
+    <div class="game-column">
+        <div id="game-viewport">
+            <div id="game-grid">
+                <!-- Buňky se generují přes JS -->
+            </div>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="hra.js"></script>
+</body>
+</html>
