@@ -1,9 +1,22 @@
 :root {
-    --color-ui-bg: #1a1a1a; --color-ui-border: #888; --color-text: #eee;
-    --color-gold: #ffd700; --color-crystal: #4dd0e1;
+    --color-ui-bg: #1a1a1a;
+    --color-ui-border: #888;
+    --color-text: #eee;
+    --color-gold: #ffd700;
+    --color-crystal: #4dd0e1;
     --color-green: #3d9440;
+    --color-red: #c62828;
 }
-body { font-family: 'Segoe UI', sans-serif; background-color: #000; color: var(--color-text); margin: 0; padding: 0; overflow: hidden; }
+
+body {
+    font-family: 'Segoe UI', sans-serif;
+    background-color: #000;
+    color: var(--color-text);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    user-select: none;
+}
 
 /* --- LOBBY STYLY --- */
 #lobby-section {
@@ -15,45 +28,220 @@ body { font-family: 'Segoe UI', sans-serif; background-color: #000; color: var(-
     flex-direction: column;
     gap: 20px;
 }
+
 .lobby-container {
-    background-color: #282828; padding: 30px; border-radius: 10px;
-    border: 1px solid #444; text-align: center; width: 400px;
+    background-color: #282828;
+    padding: 30px;
+    border-radius: 10px;
+    border: 1px solid #444;
+    text-align: center;
+    width: 400px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
 }
-#lobby-section h1, #lobby-section h2, #lobby-section h3 { color: var(--color-green); }
+
+#lobby-section h1, #lobby-section h2, #lobby-section h3 {
+    color: var(--color-green);
+    margin-top: 0;
+}
+
 #lobby-section input[type="text"] {
-    width: calc(100% - 22px); padding: 10px; margin-bottom: 20px;
-    background-color: #333; border: 1px solid #555; color: #eee; border-radius: 5px;
+    width: calc(100% - 22px);
+    padding: 10px;
+    margin-bottom: 20px;
+    background-color: #333;
+    border: 1px solid #555;
+    color: #eee;
+    border-radius: 5px;
+    font-size: 1em;
 }
+
 #lobby-section button {
-    width: 100%; padding: 12px; border: none; border-radius: 5px;
-    background-color: var(--color-green); color: white; font-size: 1.1em;
-    cursor: pointer; margin-top: 10px;
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 5px;
+    background-color: var(--color-green);
+    color: white;
+    font-size: 1.1em;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: background-color 0.2s ease;
 }
-#lobby-section button:hover { background-color: #5aab5d; }
-#lobby-section button:disabled { background-color: #333; cursor: not-allowed; }
-.join-game { margin-top: 30px; border-top: 1px solid #444; padding-top: 20px; }
-#playerList { list-style: none; padding: 0; }
-#playerList li { background-color: #333; margin: 5px 0; padding: 8px; border-radius: 3px; }
+
+#lobby-section button:hover {
+    background-color: #5aab5d;
+}
+
+#lobby-section button:disabled {
+    background-color: #555;
+    color: #999;
+    cursor: not-allowed;
+}
+
+.join-game {
+    margin-top: 30px;
+    border-top: 1px solid #444;
+    padding-top: 20px;
+}
+
+#playerList {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 20px;
+}
+
+#playerList li {
+    background-color: #333;
+    margin: 5px 0;
+    padding: 8px;
+    border-radius: 3px;
+}
+
+.error-message {
+    color: var(--color-red);
+    margin-top: 15px;
+    min-height: 1.2em;
+}
+
 
 /* --- HERNÍ STYLY --- */
-#game-section { display: flex; align-items: stretch; justify-content: center; padding: 20px; gap: 30px; width: 100vw; height: 100vh; box-sizing: border-box;}
-.info-column { display: flex; flex-direction: column; align-items: center; z-index: 10; width: 280px; flex-shrink: 0; }
-.game-column { flex-grow: 1; height: calc(100vh - 40px); }
-#game-viewport { width: 100%; height: 100%; border: 2px solid var(--color-ui-border); overflow: hidden; position: relative; background-color: #111; }
-#game-canvas { position: absolute; top: 0; left: 0; cursor: grab; }
-#game-canvas:active { cursor: grabbing; }
-.stats-panel { width: 100%; padding: 15px; background-color: var(--color-ui-bg); border: 2px solid var(--color-ui-border); margin-bottom: 20px; box-sizing: border-box;}
-.stats-panel h2 { margin: 0 0 15px 0; text-align: center; border-bottom: 1px solid #444; padding-bottom: 10px; font-size: 1.2em; color: var(--color-green); }
-.stat { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 1.1em; }
-.stat-value { font-weight: bold; }
-#gold-display { color: var(--color-gold); }
-#crystals-display { color: var(--color-crystal); }
-.unit-buy-button { width: 100%; padding: 8px; margin-top: 10px; cursor: pointer; border: none; border-radius: 5px; font-size: 1em; color: white; background-color: #3f51b5; }
-.unit-buy-button:hover { background-color: #303f9f; }
-.stat-slider { margin-top: 20px; padding-top: 15px; border-top: 1px solid #444; }
-.stat-slider label { display: block; margin-bottom: 8px; }
-#expedition-slider { width: 100%; }
-#expedition-slider-value { display: block; text-align: center; margin-top: 5px; }
-.minimap-panel { width: 100%; padding: 15px; background-color: var(--color-ui-bg); border: 2px solid var(--color-ui-border); box-sizing: border-box; text-align: center; }
-.minimap-panel h3 { margin: 0 0 10px 0; color: var(--color-green); }
-#minimap { background-color: #000; image-rendering: pixelated; width: 100%; height: auto; aspect-ratio: 1/1; }
+#game-section {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    padding: 20px;
+    gap: 30px;
+    width: 100vw;
+    height: 100vh;
+    box-sizing: border-box;
+}
+
+.info-column {
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+    width: 280px;
+    flex-shrink: 0;
+}
+
+.game-column {
+    flex-grow: 1;
+    height: calc(100vh - 40px);
+}
+
+#game-viewport {
+    width: 100%;
+    height: 100%;
+    border: 2px solid var(--color-ui-border);
+    overflow: hidden;
+    position: relative;
+    background-color: #111;
+}
+
+#game-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    cursor: grab;
+}
+
+#game-canvas:active {
+    cursor: grabbing;
+}
+
+.stats-panel {
+    width: 100%;
+    padding: 15px;
+    background-color: var(--color-ui-bg);
+    border: 2px solid var(--color-ui-border);
+    margin-bottom: 20px;
+    box-sizing: border-box;
+}
+
+.stats-panel h2 {
+    margin: 0 0 15px 0;
+    text-align: center;
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    font-size: 1.2em;
+    color: var(--color-green);
+}
+
+.stat {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+}
+
+.stat-value {
+    font-weight: bold;
+}
+
+#gold-display {
+    color: var(--color-gold);
+}
+
+#crystals-display {
+    color: var(--color-crystal);
+}
+
+.unit-buy-button {
+    width: 100%;
+    padding: 8px;
+    margin-top: 10px;
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    font-size: 1em;
+    color: white;
+    background-color: #3f51b5;
+    transition: background-color 0.2s ease;
+}
+
+.unit-buy-button:hover {
+    background-color: #303f9f;
+}
+
+.stat-slider {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #444;
+}
+
+.stat-slider label {
+    display: block;
+    margin-bottom: 8px;
+}
+
+#expedition-slider {
+    width: 100%;
+}
+
+#expedition-slider-value {
+    display: block;
+    text-align: center;
+    margin-top: 5px;
+}
+
+.minimap-panel {
+    width: 100%;
+    padding: 15px;
+    background-color: var(--color-ui-bg);
+    border: 2px solid var(--color-ui-border);
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.minimap-panel h3 {
+    margin: 0 0 10px 0;
+    color: var(--color-green);
+}
+
+#minimap {
+    background-color: #000;
+    image-rendering: pixelated;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1/1;
+}
