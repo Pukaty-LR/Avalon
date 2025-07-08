@@ -1,4 +1,5 @@
-<!-- START OF FILE index.html (Finální, stabilní verze) -->
+<!-- START OF FILE index.html (Absolutní finální verze) -->
+
 <!DOCTYPE html>
 <html lang="cs">
 <head>
@@ -21,15 +22,17 @@
             </div>
         </div>
     </div>
+    
     <div id="lobby-section" class="screen" style="display: none;">
          <div class="lobby-container">
             <h3>Čeká se na velitele...</h3>
             <h4>Kód hry: <span id="lobby-game-code"></span></h4>
             <ul id="playerList"></ul>
             <button id="startGameBtn" style="display:none;">Spustit Válku</button>
-            <p id="waiting-message"></p>
+            <p id="waiting-message">Čekání na hosta, aby spustil hru...</p>
         </div>
     </div>
+
     <div id="game-section" style="display: none;">
         <div class="top-bar">
             <div class="resource-panel">
@@ -37,11 +40,13 @@
                 <div class="resource" title="Jídlo">🍖 <span id="food-display">0</span></div>
                 <div class="resource" title="Dřevo">🌲 <span id="wood-display">0</span></div>
                 <div class="resource" title="Kámen">⛏️ <span id="stone-display">0</span></div>
+                <div class="resource" title="Věda">📚 <span id="science-display">0</span></div>
             </div>
              <div class="resource-panel">
                 <div class="resource" title="Populace / Limit">🧑‍🤝‍🧑 <span id="pop-display">0/0</span></div>
              </div>
         </div>
+
         <div id="game-container">
             <div id="game-viewport">
                 <canvas id="entity-canvas"></canvas>
@@ -62,18 +67,28 @@
             </div>
         </div>
     </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let gameState = null, myId = null, animationFrameId = null;
+
+        let gameState = null;
+        let myId = null;
+        let animationFrameId = null;
         let camera = { x: 0, y: 0, scale: 0.5 };
         const CELL_SIZE = 12;
-        let selectedUnits = new Set(), selectedBuilding = null, placingBuildingType = null;
+        let selectedUnits = new Set();
+        let selectedBuilding = null;
+        let placingBuildingType = null;
         const FOW_STATE = { HIDDEN: 0, EXPLORED: 1, VISIBLE: 2 };
         let visibilityMap = null;
-        const entityCanvas = document.getElementById('entity-canvas'), entityCtx = entityCanvas.getContext('2d');
-        const fowCanvas = document.getElementById('fow-canvas'), fowCtx = fowCanvas.getContext('2d');
-        const minimapCanvas = document.getElementById('minimap'), minimapCtx = minimapCanvas.getContext('2d');
+
+        const entityCanvas = document.getElementById('entity-canvas');
+        const entityCtx = entityCanvas.getContext('2d');
+        const fowCanvas = document.getElementById('fow-canvas');
+        const fowCtx = fowCanvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimap');
+        const minimapCtx = minimapCanvas.getContext('2d');
         const playerNameInput = document.getElementById('playerNameInput');
         const buildGhost = document.getElementById('build-ghost');
         const selectionBox = document.getElementById('selection-box');
@@ -83,22 +98,42 @@
             document.getElementById(`${screenName}-section`).style.display = 'flex';
         };
 
-        const preActionNameSet = () => socket.emit('setPlayerName', playerNameInput.value);
+        const preActionNameSet = () => {
+            if (playerNameInput.value.trim()) {
+                 socket.emit('setPlayerName', playerNameInput.value);
+            }
+        };
 
-        document.getElementById('soloGameBtn').addEventListener('click', () => { preActionNameSet(); socket.emit('createLobby', { isPrivate: true, isSolo: true }); });
-        document.getElementById('findGameBtn').addEventListener('click', () => { preActionNameSet(); socket.emit('findPublicLobby'); });
-        document.getElementById('createGameBtn').addEventListener('click', () => { preActionNameSet(); socket.emit('createLobby', { isPrivate: true, isSolo: false }); });
+        document.getElementById('soloGameBtn').addEventListener('click', () => {
+            preActionNameSet();
+            socket.emit('createLobby', { isPrivate: true, isSolo: true });
+        });
+        document.getElementById('findGameBtn').addEventListener('click', () => {
+            preActionNameSet();
+            socket.emit('findPublicLobby');
+        });
+        document.getElementById('createGameBtn').addEventListener('click', () => {
+            preActionNameSet();
+            socket.emit('createLobby', { isPrivate: true, isSolo: false });
+        });
         document.getElementById('joinGameBtn').addEventListener('click', () => {
             const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
-            if (code) { preActionNameSet(); socket.emit('joinLobby', code); }
+            if (code) {
+                preActionNameSet();
+                socket.emit('joinLobby', code);
+            }
         });
-        document.getElementById('startGameBtn').addEventListener('click', () => { if (gameState && gameState.gameCode) socket.emit('startGame', gameState.gameCode); });
+        document.getElementById('startGameBtn').addEventListener('click', () => {
+            if (gameState && gameState.gameCode) {
+                socket.emit('startGame', gameState.gameCode);
+            }
+        });
 
         socket.on('connect', () => { myId = socket.id; showScreen('main-menu'); });
         socket.on('disconnect', () => { alert("Spojení se serverem Avalon bylo přerušeno."); cancelAnimationFrame(animationFrameId); location.reload(); });
         socket.on('gameError', (error) => { alert(`Chyba: ${error.message}`); });
 
-        socket.on('lobbyUpdate', (data) => {
+        const updateLobbyView = (data) => {
             gameState = { gameCode: data.gameCode };
             document.getElementById('lobby-game-code').textContent = data.gameCode;
             document.getElementById('playerList').innerHTML = data.players.map(p => `<li class="${p.id === data.hostId ? 'host' : ''}">${p.name} ${p.id === data.hostId ? '(Host)' : ''}</li>`).join('');
@@ -106,16 +141,24 @@
             const waitingMsg = document.getElementById('waiting-message');
             if (myId === data.hostId) {
                 startBtn.style.display = 'block';
-                waitingMsg.textContent = `Hra je připravena pro ${data.players.length} hráče.`;
+                waitingMsg.textContent = `Hra je připravena pro ${data.players.length} hráče. Můžeš spustit válku.`;
             } else {
                 startBtn.style.display = 'none';
                 waitingMsg.textContent = 'Čekání na hosta, aby spustil hru...';
             }
             showScreen('lobby');
-        });
+        };
+        socket.on('lobbyJoined', updateLobbyView);
+        socket.on('lobbyUpdate', updateLobbyView);
 
         socket.on('gameStarted', (initialPacket) => {
-            gameState = { ...initialPacket, players: new Map(initialPacket.players.map(p => [p.id, { ...p }])), units: new Map(), buildings: new Map(), effects: [] };
+            gameState = {
+                ...initialPacket,
+                players: new Map(initialPacket.players.map(p => [p.id, { ...p }])),
+                units: new Map(),
+                buildings: new Map(),
+                effects: []
+            };
             visibilityMap = new Uint8Array(gameState.config.GRID_SIZE * gameState.config.GRID_SIZE).fill(FOW_STATE.HIDDEN);
             const myPlayer = gameState.players.get(myId);
             if (myPlayer && myPlayer.startPos) {
@@ -139,7 +182,9 @@
             let fowChanged = false;
             if (update.visibilityChanges?.length > 0) {
                 fowChanged = true;
-                update.visibilityChanges.forEach(cell => { visibilityMap[cell.y * gameState.config.GRID_SIZE + cell.x] = cell.state; });
+                update.visibilityChanges.forEach(cell => {
+                    visibilityMap[cell.y * gameState.config.GRID_SIZE + cell.x] = cell.state;
+                });
             }
             gameState.units = new Map(update.units.map(u => [u.id, u]));
             gameState.buildings = new Map(update.buildings.map(b => [b.id, b]));
@@ -151,8 +196,11 @@
                 }
             });
             updateUI();
-            updateSelectionPanel();
-            if (fowChanged) { renderFOW(); renderMinimap(); }
+            if (selectedBuilding || selectedUnits.size > 0) updateSelectionPanel();
+            if (fowChanged) {
+                renderFOW();
+                renderMinimap();
+            }
         });
         
         socket.on('gameOver', ({reason}) => {
@@ -173,19 +221,24 @@
             renderEffects(entityCtx);
             entityCtx.restore();
         }
+
         function renderBoard(ctx) {
             const { GRID_SIZE, TERRAIN } = gameState.config;
-            const sX = Math.floor(-camera.x / (CELL_SIZE * camera.scale)), eX = sX + Math.ceil(entityCanvas.width / (CELL_SIZE * camera.scale)) + 1;
-            const sY = Math.floor(-camera.y / (CELL_SIZE * camera.scale)), eY = sY + Math.ceil(entityCanvas.height / (CELL_SIZE * camera.scale)) + 1;
-            for (let y = Math.max(0, sY); y < Math.min(GRID_SIZE, eY); y++) {
-                for (let x = Math.max(0, sX); x < Math.min(GRID_SIZE, eX); x++) {
-                     if (visibilityMap[y * GRID_SIZE + x] !== FOW_STATE.HIDDEN) {
+            const startX = Math.floor(-camera.x / (CELL_SIZE * camera.scale));
+            const startY = Math.floor(-camera.y / (CELL_SIZE * camera.scale));
+            const endX = startX + Math.ceil(entityCanvas.width / (CELL_SIZE * camera.scale)) + 1;
+            const endY = startY + Math.ceil(entityCanvas.height / (CELL_SIZE * camera.scale)) + 1;
+            for (let y = Math.max(0, startY); y < Math.min(GRID_SIZE, endY); y++) {
+                for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
+                     const state = visibilityMap[y * GRID_SIZE + x];
+                     if (state === FOW_STATE.VISIBLE || state === FOW_STATE.EXPLORED) {
                         ctx.fillStyle = TERRAIN[gameState.board[y][x]]?.color || '#000';
                         ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
                      }
                 }
             }
         }
+
         function renderFOW() {
             if (!gameState || !visibilityMap) return;
             fowCtx.clearRect(0, 0, fowCanvas.width, fowCanvas.height);
@@ -193,10 +246,12 @@
             fowCtx.translate(camera.x, camera.y);
             fowCtx.scale(camera.scale, camera.scale);
             const { GRID_SIZE } = gameState.config;
-            const sX = Math.floor(-camera.x / (CELL_SIZE * camera.scale)), eX = sX + Math.ceil(fowCanvas.width / (CELL_SIZE * camera.scale)) + 1;
-            const sY = Math.floor(-camera.y / (CELL_SIZE * camera.scale)), eY = sY + Math.ceil(fowCanvas.height / (CELL_SIZE * camera.scale)) + 1;
-            for (let y = Math.max(0, sY); y < Math.min(GRID_SIZE, eY); y++) {
-                for (let x = Math.max(0, sX); x < Math.min(GRID_SIZE, eX); x++) {
+            const startX = Math.floor(-camera.x / (CELL_SIZE * camera.scale));
+            const startY = Math.floor(-camera.y / (CELL_SIZE * camera.scale));
+            const endX = startX + Math.ceil(fowCanvas.width / (CELL_SIZE * camera.scale)) + 1;
+            const endY = startY + Math.ceil(fowCanvas.height / (CELL_SIZE * camera.scale)) + 1;
+            for (let y = Math.max(0, startY); y < Math.min(GRID_SIZE, endY); y++) {
+                for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
                      const state = visibilityMap[y * GRID_SIZE + x];
                      if (state === FOW_STATE.EXPLORED) {
                         fowCtx.fillStyle = "rgba(0, 0, 0, 0.5)";
@@ -209,66 +264,92 @@
             }
             fowCtx.restore();
         }
+        
         function renderEntities(ctx) {
             gameState.buildings.forEach(b => {
                 const pColor = gameState.players.get(b.ownerId)?.color || 'grey';
                 ctx.fillStyle = pColor;
-                ctx.fillRect(b.x * CELL_SIZE, b.y * CELL_SIZE, 3 * CELL_SIZE, 3 * CELL_SIZE);
+                const b_size = (b.type === 'VEZ' ? 2 : 3);
+                ctx.fillRect(b.x * CELL_SIZE, b.y * CELL_SIZE, b_size * CELL_SIZE, b_size * CELL_SIZE);
+                if (b.type === 'FARMA') { ctx.fillStyle = '#27ae60'; ctx.fillRect((b.x + 0.5) * CELL_SIZE, (b.y + 0.5) * CELL_SIZE, 2 * CELL_SIZE, 2 * CELL_SIZE); }
+                if (b.type === 'DUL') { ctx.fillStyle = '#7f8c8d'; ctx.fillRect((b.x + 0.5) * CELL_SIZE, (b.y + 0.5) * CELL_SIZE, 2 * CELL_SIZE, 2 * CELL_SIZE); }
+                if (b.type === 'VEZ') { ctx.fillStyle = '#bdc3c7'; ctx.fillRect((b.x + 0.5) * CELL_SIZE, (b.y + 0.5) * CELL_SIZE, 1 * CELL_SIZE, 1 * CELL_SIZE); }
+                if (b.type === 'PILA') { ctx.fillStyle = '#8c5a2b'; ctx.beginPath(); ctx.moveTo((b.x+0.5)*CELL_SIZE, (b.y+2.5)*CELL_SIZE); ctx.lineTo((b.x+1.5)*CELL_SIZE, (b.y+0.5)*CELL_SIZE); ctx.lineTo((b.x+2.5)*CELL_SIZE, (b.y+2.5)*CELL_SIZE); ctx.closePath(); ctx.fill(); }
+
                 ctx.strokeStyle = '#000';
-                ctx.strokeRect(b.x * CELL_SIZE, b.y * CELL_SIZE, 3 * CELL_SIZE, 3 * CELL_SIZE);
-                if (b.hp < b.maxHp) drawHealthBar(ctx, b.x * CELL_SIZE, (b.y - 0.5) * CELL_SIZE, 3 * CELL_SIZE, 4 / camera.scale, b.hp / b.maxHp);
+                ctx.strokeRect(b.x * CELL_SIZE, b.y * CELL_SIZE, b_size * CELL_SIZE, b_size * CELL_SIZE);
+                if (b.hp < b.maxHp) drawHealthBar(ctx, b.x * CELL_SIZE, (b.y - 0.5) * CELL_SIZE, b_size * CELL_SIZE, 4 / camera.scale, b.hp / b.maxHp);
                 if (selectedBuilding === b.id) {
                      ctx.strokeStyle = 'white';
                      ctx.lineWidth = 3 / camera.scale;
-                     ctx.strokeRect(b.x * CELL_SIZE, b.y * CELL_SIZE, 3 * CELL_SIZE, 3 * CELL_SIZE);
+                     ctx.strokeRect(b.x * CELL_SIZE, b.y * CELL_SIZE, b_size * CELL_SIZE, b_size * CELL_SIZE);
                 }
             });
             gameState.units.forEach(u => {
                 const pColor = gameState.players.get(u.ownerId)?.color || 'grey';
                 ctx.fillStyle = pColor;
                 ctx.beginPath();
-                if (u.type === "STAVITEL") {
-                    ctx.rect(u.x * CELL_SIZE - (CELL_SIZE * 0.5), u.y * CELL_SIZE - (CELL_SIZE * 0.5), CELL_SIZE, CELL_SIZE);
+                if (u.type === 'STAVITEL') {
+                    ctx.rect(u.x * CELL_SIZE - CELL_SIZE * 0.6, u.y * CELL_SIZE - CELL_SIZE * 0.6, CELL_SIZE * 1.2, CELL_SIZE * 1.2);
                 } else {
                     ctx.arc(u.x * CELL_SIZE, u.y * CELL_SIZE, CELL_SIZE * 0.7, 0, 2 * Math.PI);
                 }
                 ctx.fill();
+                if (u.type === "LUCISTNIK") {
+                    ctx.fillStyle = "white";
+                    ctx.fillRect(u.x * CELL_SIZE - 2/camera.scale, u.y * CELL_SIZE - 2 / camera.scale, 4 / camera.scale, 4 / camera.scale);
+                }
                 if (selectedUnits.has(u.id)) {
                      ctx.strokeStyle = 'white';
                      ctx.lineWidth = 2 / camera.scale;
                      ctx.stroke();
                 }
-                if (u.hp < u.maxHp) drawHealthBar(ctx, u.x * CELL_SIZE - CELL_SIZE, (u.y - 1.2) * CELL_SIZE, 2 * CELL_SIZE, 3 / camera.scale, u.hp / u.maxHp);
+                 if (u.hp < u.maxHp) drawHealthBar(ctx, u.x * CELL_SIZE - CELL_SIZE, (u.y - 1) * CELL_SIZE, 2 * CELL_SIZE, 3 / camera.scale, u.hp / u.maxHp);
             });
         }
+        
         function renderEffects(ctx) {
             ctx.lineWidth = 2 / camera.scale;
             gameState.effects = gameState.effects.filter(e => {
                 e.duration -= 1/60;
                 if (e.duration <= 0) return false;
                 ctx.globalAlpha = e.duration / e.maxDuration;
-                ctx.strokeStyle = (e.unitType === 'VEZ' || e.unitType === 'LUCISTNIK') ? 'yellow' : '#E53935';
-                ctx.beginPath();
-                ctx.moveTo(e.from.x * CELL_SIZE, e.from.y * CELL_SIZE);
-                ctx.lineTo(e.to.x * CELL_SIZE, e.to.y * CELL_SIZE);
-                ctx.stroke();
+                if (e.unitType === 'LUCISTNIK' || e.unitType === 'VEZ') {
+                    ctx.strokeStyle = (e.unitType === 'VEZ') ? '#e74c3c' : 'yellow';
+                    ctx.beginPath();
+                    ctx.moveTo(e.from.x * CELL_SIZE, e.from.y * CELL_SIZE);
+                    ctx.lineTo(e.to.x * CELL_SIZE, e.to.y * CELL_SIZE);
+                    ctx.stroke();
+                } else {
+                    ctx.strokeStyle = 'red';
+                    ctx.beginPath();
+                    ctx.arc(e.to.x * CELL_SIZE, e.to.y * CELL_SIZE, CELL_SIZE * 0.5, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
                 return true;
             });
             ctx.globalAlpha = 1.0;
         }
-        function drawHealthBar(ctx, x, y, w, h, p) {
-            ctx.fillStyle = '#c0392b'; ctx.fillRect(x, y, w, h);
-            ctx.fillStyle = '#27ae60'; ctx.fillRect(x, y, w * p, h);
-            ctx.strokeStyle = '#000'; ctx.lineWidth = 0.5 / camera.scale; ctx.strokeRect(x, y, w, h);
+
+        function drawHealthBar(ctx, x, y, width, height, progress) {
+            ctx.fillStyle = '#c0392b';
+            ctx.fillRect(x, y, width, height);
+            ctx.fillStyle = '#27ae60';
+            ctx.fillRect(x, y, width * progress, height);
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 0.5 / camera.scale;
+            ctx.strokeRect(x, y, width, height);
         }
+        
         function renderMinimap() {
             if (!gameState || !visibilityMap) return;
-            const size = gameState.config.GRID_SIZE, pixelSize = minimapCanvas.width / size;
+            const size = gameState.config.GRID_SIZE;
+            const pixelSize = minimapCanvas.width / size;
             minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
             for(let y = 0; y < size; y++) {
                 for(let x = 0; x < size; x++) {
                     const state = visibilityMap[y * size + x];
-                    if (state !== FOW_STATE.HIDDEN) {
+                    if (state === FOW_STATE.VISIBLE || state === FOW_STATE.EXPLORED) {
                         minimapCtx.fillStyle = gameState.config.TERRAIN[gameState.board[y][x]]?.color || 'black';
                         if (state === FOW_STATE.EXPLORED) minimapCtx.globalAlpha = 0.5;
                         minimapCtx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
@@ -278,10 +359,15 @@
             }
             gameState.players.forEach(p => {
                 minimapCtx.fillStyle = p.color;
-                gameState.units.forEach(u => { if (u.ownerId === p.id) minimapCtx.fillRect(u.x * pixelSize, u.y * pixelSize, pixelSize, pixelSize); });
-                gameState.buildings.forEach(b => { if (b.ownerId === p.id) minimapCtx.fillRect(b.x * pixelSize, b.y * pixelSize, pixelSize * 2, pixelSize * 2); });
+                gameState.units.forEach(u => {
+                    if (u.ownerId === p.id) minimapCtx.fillRect(u.x * pixelSize, u.y * pixelSize, pixelSize, pixelSize);
+                });
+                 gameState.buildings.forEach(b => {
+                    if (b.ownerId === p.id) minimapCtx.fillRect(b.x * pixelSize, b.y * pixelSize, pixelSize * 2, pixelSize * 2);
+                });
             });
         }
+
         function updateUI() {
             const me = gameState.players.get(myId);
             if(me && me.resources) {
@@ -289,74 +375,127 @@
                 document.getElementById('food-display').textContent = Math.floor(me.resources.food);
                 document.getElementById('wood-display').textContent = Math.floor(me.resources.wood);
                 document.getElementById('stone-display').textContent = Math.floor(me.resources.stone);
+                document.getElementById('science-display').textContent = Math.floor(me.resources.science);
                 document.getElementById('pop-display').textContent = `${me.pop?.current || 0}/${me.pop?.cap || 0}`;
             }
         }
+        
+        function formatCost(cost) {
+            let str = '';
+            if (cost.gold) str += `💰${cost.gold} `;
+            if (cost.food) str += `🍖${cost.food} `;
+            if (cost.wood) str += `🌲${cost.wood} `;
+            if (cost.stone) str += `⛏️${cost.stone} `;
+            return str.trim();
+        }
+
         function updateSelectionPanel() {
-            const nameEl = document.getElementById('selection-name'), detailsEl = document.getElementById('selection-details'), actionsEl = document.getElementById('selection-actions');
-            detailsEl.innerHTML = ''; actionsEl.innerHTML = '';
+            const nameEl = document.getElementById('selection-name');
+            const detailsEl = document.getElementById('selection-details');
+            const actionsEl = document.getElementById('selection-actions');
+            detailsEl.innerHTML = '';
+            actionsEl.innerHTML = '';
             if (selectedBuilding && gameState.buildings.has(selectedBuilding)) {
-                const b = gameState.buildings.get(selectedBuilding), b_conf = gameState.config.BUILDINGS[b.type];
+                const b = gameState.buildings.get(selectedBuilding);
+                const b_conf = gameState.config.BUILDINGS[b.type];
                 nameEl.textContent = b_conf.name;
                 detailsEl.innerHTML = `<p>HP: ${Math.ceil(b.hp)} / ${b.maxHp}</p>`;
                 if (b_conf.trains) {
                     b_conf.trains.forEach(unitType => {
                         const u_conf = gameState.config.UNITS[unitType];
-                        actionsEl.innerHTML += `<button class="action-button" data-action="train" data-unit="${unitType}">${u_conf.name}</button>`;
+                        const costStr = formatCost(u_conf.cost);
+                        actionsEl.innerHTML += `<button class="action-button" data-action="train" data-unit="${unitType}">${u_conf.name} <br> <small>${costStr}</small></button>`;
                     });
                 }
-                 if(b.trainingQueue?.length > 0) detailsEl.innerHTML += '<h4>Fronta:</h4>' + b.trainingQueue.map(item => `<div>${gameState.config.UNITS[item.unitType].name} (${Math.floor(item.progress*100)}%)</div>`).join('');
+                 if(b.trainingQueue?.length > 0) {
+                    detailsEl.innerHTML += '<h4>Fronta:</h4>' + b.trainingQueue.map(item => `<div>${gameState.config.UNITS[item.unitType].name} (${Math.floor(item.progress*100)}%)</div>`).join('');
+                }
             } else if (selectedUnits.size > 0) {
                  if (selectedUnits.size === 1) {
-                    const unit = gameState.units.get(selectedUnits.values().next().value);
-                    if (unit) {
+                    const unitId = selectedUnits.values().next().value;
+                    if(gameState.units.has(unitId)) {
+                        const unit = gameState.units.get(unitId);
                         const u_conf = gameState.config.UNITS[unit.type];
                         nameEl.textContent = u_conf.name;
                         detailsEl.innerHTML = `<p>HP: ${Math.ceil(unit.hp)} / ${unit.maxHp}</p>`;
                         if (unit.can_build) {
-                           ['DUM', 'FARMA', 'PILA', 'DUL', 'VEZ', 'KASARNY', 'STRELNICE', 'STAJE'].forEach(key => {
-                               const conf = gameState.config.BUILDINGS[key];
-                               actionsEl.innerHTML += `<button class="action-button build-button" data-structure="${key}" title="${Object.entries(conf.cost).map(([k,v]) => `${v} ${k}`).join(', ')}">${conf.name}</button>`;
+                           Object.entries(gameState.config.BUILDINGS).forEach(([key, conf]) => {
+                               if (Object.keys(conf.cost).length > 0) {
+                                   const costStr = formatCost(conf.cost);
+                                   actionsEl.innerHTML += `<button class="action-button build-button" data-structure="${key}">${conf.name} <br> <small>${costStr}</small></button>`;
+                               }
                            });
                         }
                     } else { selectedUnits.clear(); updateSelectionPanel(); }
-                 } else { nameEl.textContent = `${selectedUnits.size} jednotek`; }
-            } else { nameEl.textContent = 'Nic nevybráno'; }
+                 } else {
+                    const counts = {};
+                    selectedUnits.forEach(id => {
+                        const u = gameState.units.get(id);
+                        if (u) counts[u.type] = (counts[u.type] || 0) + 1;
+                    });
+                    nameEl.textContent = `${selectedUnits.size} jednotek`;
+                    detailsEl.innerHTML = Object.entries(counts).map(([type, count]) => `<div>${count}x ${gameState.config.UNITS[type].name}</div>`).join('');
+                 }
+            } else {
+                nameEl.textContent = 'Nic nevybráno';
+            }
         }
+
         function getMouseWorldPos(e) {
             const rect = entityCanvas.getBoundingClientRect();
             const x = (e.clientX - rect.left - camera.x) / camera.scale;
             const y = (e.clientY - rect.top - camera.y) / camera.scale;
             return { x: x / CELL_SIZE, y: y / CELL_SIZE };
         }
-        let isDragging = false, dragStartPos = {x: 0, y: 0}, selectionStartPos = {x: 0, y: 0};
+        
+        function getMouseScreenPos(e) {
+            const rect = entityCanvas.getBoundingClientRect();
+            return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        }
+        
+        let isDragging = false, dragStartPos = { x: 0, y: 0 };
+        let isBoxSelecting = false, selectionStartPos = { x: 0, y: 0 };
+        
         entityCanvas.addEventListener('mousedown', (e) => {
-            if (e.button === 1) { isDragging = true; dragStartPos = { x: e.clientX - camera.x, y: e.clientY - camera.y }; return; }
-            if (e.button !== 0) return;
-            selectionStartPos = { x: e.clientX, y: e.clientY };
-            if (placingBuildingType) {
-                const worldPos = getMouseWorldPos(e);
-                const builderId = Array.from(selectedUnits).find(id => gameState.units.get(id)?.can_build);
-                if(builderId) socket.emit('playerAction', { type: 'BUILD_STRUCTURE', payload: { builderId, structureType: placingBuildingType, position: {x: Math.floor(worldPos.x), y: Math.floor(worldPos.y) } } });
-                placingBuildingType = null; buildGhost.style.display = 'none'; entityCanvas.style.cursor = 'default';
-                return;
+            const worldPos = getMouseWorldPos(e);
+            
+            if (e.button === 0) { // Left click
+                if (placingBuildingType) {
+                    const builderId = Array.from(selectedUnits).find(id => gameState.units.get(id)?.can_build);
+                    if(builderId) {
+                        socket.emit('playerAction', { type: 'BUILD_STRUCTURE', payload: { builderId, structureType: placingBuildingType, position: {x: Math.floor(worldPos.x), y: Math.floor(worldPos.y) } } });
+                    }
+                    placingBuildingType = null;
+                    buildGhost.style.display = 'none';
+                    entityCanvas.style.cursor = 'default';
+                    return;
+                }
+                
+                isBoxSelecting = true;
+                selectionStartPos = getMouseScreenPos(e);
+                selectionBox.style.left = `${selectionStartPos.x}px`;
+                selectionBox.style.top = `${selectionStartPos.y}px`;
+                selectionBox.style.width = '0px';
+                selectionBox.style.height = '0px';
+                selectionBox.style.display = 'block';
+
+            } else if(e.button === 1) { // Middle click
+                isDragging = true;
+                dragStartPos = { x: e.clientX - camera.x, y: e.clientY - camera.y };
             }
-            selectionBox.style.left = `${selectionStartPos.x}px`;
-            selectionBox.style.top = `${selectionStartPos.y}px`;
-            selectionBox.style.width = '0px';
-            selectionBox.style.height = '0px';
-            selectionBox.style.display = 'block';
         });
+
         entityCanvas.addEventListener('mousemove', (e) => {
             if (isDragging) {
                 camera.x = e.clientX - dragStartPos.x;
                 camera.y = e.clientY - dragStartPos.y;
                 renderFOW();
-            } else if (selectionBox.style.display === 'block') {
-                const x = Math.min(e.clientX, selectionStartPos.x);
-                const y = Math.min(e.clientY, selectionStartPos.y);
-                const width = Math.abs(e.clientX - selectionStartPos.x);
-                const height = Math.abs(e.clientY - selectionStartPos.y);
+            } else if (isBoxSelecting) {
+                const currentPos = getMouseScreenPos(e);
+                const x = Math.min(selectionStartPos.x, currentPos.x);
+                const y = Math.min(selectionStartPos.y, currentPos.y);
+                const width = Math.abs(selectionStartPos.x - currentPos.x);
+                const height = Math.abs(selectionStartPos.y - currentPos.y);
                 selectionBox.style.left = `${x}px`;
                 selectionBox.style.top = `${y}px`;
                 selectionBox.style.width = `${width}px`;
@@ -364,99 +503,151 @@
             }
              if(placingBuildingType) {
                 const worldPos = getMouseWorldPos(e);
+                const buildingConf = gameState.config.BUILDINGS[placingBuildingType];
+                const size = (buildingConf.type === 'VEZ' ? 2 : 3);
                 buildGhost.style.left = `${Math.floor(worldPos.x) * CELL_SIZE * camera.scale + camera.x}px`;
                 buildGhost.style.top = `${Math.floor(worldPos.y) * CELL_SIZE * camera.scale + camera.y}px`;
+                buildGhost.style.width = buildGhost.style.height = `${size * CELL_SIZE * camera.scale}px`;
             }
         });
-        entityCanvas.addEventListener('mouseup', (e) => {
-            if (e.button === 1) { isDragging = false; return; }
-            if (e.button !== 0) return;
-            if (selectionBox.style.display === 'block') {
-                selectionBox.style.display = 'none';
-                const rect = entityCanvas.getBoundingClientRect();
-                const selRect = selectionBox.getBoundingClientRect();
-                const newSelected = new Set();
-                const selWidth = parseFloat(selectionBox.style.width);
-                const selHeight = parseFloat(selectionBox.style.height);
 
-                if(selWidth > 5 || selHeight > 5) { // Box selection
-                    gameState.units.forEach(u => {
-                        if (u.ownerId === myId) {
-                            const unitScreenX = u.x * CELL_SIZE * camera.scale + camera.x + rect.left;
-                            const unitScreenY = u.y * CELL_SIZE * camera.scale + camera.y + rect.top;
-                            if (unitScreenX >= selRect.left && unitScreenX <= selRect.right && unitScreenY >= selRect.top && unitScreenY <= selRect.bottom) {
-                                newSelected.add(u.id);
+        entityCanvas.addEventListener('mouseup', (e) => {
+            if (e.button === 0) { // Left click up
+                if (isBoxSelecting) {
+                    selectionBox.style.display = 'none';
+                    isBoxSelecting = false;
+                    
+                    const endPos = getMouseScreenPos(e);
+                    const movedDist = Math.hypot(endPos.x - selectionStartPos.x, endPos.y - selectionStartPos.y);
+
+                    selectedBuilding = null;
+
+                    if (movedDist < 5) { // Click
+                        selectedUnits.clear();
+                        const worldPos = getMouseWorldPos(e);
+                        let foundBuilding = null;
+                        gameState.buildings.forEach(b => {
+                            const b_size = (b.type === 'VEZ' ? 2 : 3);
+                            if (worldPos.x >= b.x && worldPos.x <= b.x + b_size && worldPos.y >= b.y && worldPos.y <= b.y + b_size) {
+                                foundBuilding = b;
                             }
-                        }
-                    });
-                    if (newSelected.size > 0) {
-                        selectedUnits = newSelected;
-                        selectedBuilding = null;
-                    }
-                } else { // Single click
-                    const worldPos = getMouseWorldPos(e);
-                    selectedUnits.clear(); selectedBuilding = null;
-                    let foundBuilding = null;
-                    gameState.buildings.forEach(b => { if (worldPos.x >= b.x && worldPos.x <= b.x + 3 && worldPos.y >= b.y && worldPos.y <= b.y + 3) foundBuilding = b; });
-                    if(foundBuilding) {
-                        if (foundBuilding.ownerId === myId) selectedBuilding = foundBuilding.id;
-                    } else {
-                        let closestUnit = null, minDistSq = 1;
-                        gameState.units.forEach(u => {
-                            const distSq = (u.x - worldPos.x)**2 + (u.y - worldPos.y)**2;
-                            if (distSq < minDistSq && u.ownerId === myId) { closestUnit = u; minDistSq = distSq; }
                         });
-                        if (closestUnit) selectedUnits.add(closestUnit.id);
+                        if(foundBuilding) {
+                            if (foundBuilding.ownerId === myId) selectedBuilding = foundBuilding.id;
+                        } else {
+                            let closestUnit = null, minDistSq = 1;
+                            gameState.units.forEach(u => {
+                                if (u.ownerId === myId) {
+                                    const distSq = (u.x - worldPos.x)**2 + (u.y - worldPos.y)**2;
+                                    if (distSq < minDistSq) { closestUnit = u; minDistSq = distSq; }
+                                }
+                            });
+                            if (closestUnit) selectedUnits.add(closestUnit.id);
+                        }
+                    } else { // Drag
+                        selectedUnits.clear();
+                        const rect = entityCanvas.getBoundingClientRect();
+                        const startWorld = getMouseWorldPos({clientX: selectionStartPos.x + rect.left, clientY: selectionStartPos.y + rect.top});
+                        const endWorld = getMouseWorldPos({clientX: endPos.x + rect.left, clientY: endPos.y + rect.top});
+
+                        const minX = Math.min(startWorld.x, endWorld.x);
+                        const maxX = Math.max(startWorld.x, endWorld.x);
+                        const minY = Math.min(startWorld.y, endWorld.y);
+                        const maxY = Math.max(startWorld.y, endWorld.y);
+
+                        gameState.units.forEach(u => {
+                            if (u.ownerId === myId && u.x >= minX && u.x <= maxX && u.y >= minY && u.y <= maxY) {
+                                selectedUnits.add(u.id);
+                            }
+                        });
                     }
+                    updateSelectionPanel();
                 }
-                updateSelectionPanel();
             }
+            if (e.button === 1) isDragging = false;
         });
+
         entityCanvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            if (placingBuildingType) { placingBuildingType = null; buildGhost.style.display = 'none'; entityCanvas.style.cursor = 'default'; return; }
+            if (placingBuildingType) {
+                placingBuildingType = null;
+                buildGhost.style.display = 'none';
+                entityCanvas.style.cursor = 'default';
+                return;
+            }
             if (selectedUnits.size === 0) return;
             const targetPos = getMouseWorldPos(e);
+            
             let targetEntity = null;
-            let minDistSq = 1.5;
-            [...gameState.units.values(), ...gameState.buildings.values()].forEach(e => {
-                if(e.ownerId !== myId) {
-                    const ePos = e.id.startsWith('bld_') ? {x: e.x + 1.5, y: e.y + 1.5} : {x: e.x, y: e.y};
-                    const distSq = (ePos.x - targetPos.x)**2 + (ePos.y - targetPos.y)**2;
-                    if(distSq < minDistSq) { targetEntity = e; minDistSq = distSq; }
+            let minDistSq = 1;
+
+            gameState.units.forEach(u => {
+                if (u.ownerId !== myId) {
+                    const distSq = (u.x - targetPos.x)**2 + (u.y - targetPos.y)**2;
+                    if (distSq < minDistSq) {
+                        targetEntity = {type: 'unit', id: u.id};
+                        minDistSq = distSq;
+                    }
                 }
             });
+            gameState.buildings.forEach(b => {
+                if(b.ownerId !== myId){
+                    const b_size = b.type === 'VEZ' ? 2 : 3;
+                    const b_center_x = b.x + b_size / 2;
+                    const b_center_y = b.y + b_size / 2;
+                    const distSq = (b_center_x - targetPos.x)**2 + (b_center_y - targetPos.y)**2;
+                    if(distSq < (minDistSq + (b_size**2)/2) && targetPos.x >= b.x && targetPos.x <= b.x + b_size && targetPos.y >= b.y && targetPos.y <= b.y + b_size){
+                         targetEntity = {type: 'building', id: b.id};
+                         minDistSq = distSq;
+                    }
+                }
+            });
+
             if (targetEntity) {
                 socket.emit('playerAction', { type: 'ATTACK_TARGET', payload: { unitIds: Array.from(selectedUnits), targetId: targetEntity.id } });
             } else {
                 socket.emit('playerAction', { type: 'MOVE_UNITS', payload: { unitIds: Array.from(selectedUnits), target: targetPos } });
             }
         });
-        entityCanvas.addEventListener('mouseleave', () => { isDragging = false; selectionBox.style.display = 'none'; });
-        entityCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const mousePos = { x: e.clientX - entityCanvas.getBoundingClientRect().left, y: e.clientY - entityCanvas.getBoundingClientRect().top }; const zoom = e.deltaY < 0 ? 1.1 : 1 / 1.1; const newScale = Math.max(0.2, Math.min(camera.scale * zoom, 3.0)); const worldX = (mousePos.x - camera.x) / camera.scale; const worldY = (mousePos.y - camera.y) / camera.scale; camera.x = mousePos.x - worldX * newScale; camera.y = mousePos.y - worldY * newScale; camera.scale = newScale; if (placingBuildingType) { buildGhost.style.width = buildGhost.style.height = `${3 * CELL_SIZE * camera.scale}px`; } renderFOW(); }, { passive: false });
+        
+        entityCanvas.addEventListener('mouseleave', () => {
+             isDragging = false;
+             isBoxSelecting = false;
+             selectionBox.style.display = 'none';
+        });
+
+        entityCanvas.addEventListener('wheel', (e) => { e.preventDefault(); const mousePos = { x: e.clientX - entityCanvas.getBoundingClientRect().left, y: e.clientY - entityCanvas.getBoundingClientRect().top }; const zoom = e.deltaY < 0 ? 1.1 : 1 / 1.1; const newScale = Math.max(0.1, Math.min(camera.scale * zoom, 3.0)); const worldX = (mousePos.x - camera.x) / camera.scale; const worldY = (mousePos.y - camera.y) / camera.scale; camera.x = mousePos.x - worldX * newScale; camera.y = mousePos.y - worldY * newScale; camera.scale = newScale; if (placingBuildingType) { const buildingConf = gameState.config.BUILDINGS[placingBuildingType]; const size = (buildingConf.type === 'VEZ' ? 2 : 3); buildGhost.style.width = buildGhost.style.height = `${size * CELL_SIZE * camera.scale}px`; } renderFOW(); }, { passive: false });
+        
         document.getElementById('selection-actions').addEventListener('click', e => {
             const button = e.target.closest('.action-button');
-            if(button) {
-                if (button.dataset.action === 'train') {
-                    socket.emit('playerAction', { type: 'TRAIN_UNIT', payload: { buildingId: selectedBuilding, unitType: button.dataset.unit } });
-                } else if (button.classList.contains('build-button')) {
-                    placingBuildingType = button.dataset.structure;
-                    entityCanvas.style.cursor = 'copy';
-                    buildGhost.style.display = 'block';
-                    buildGhost.style.width = buildGhost.style.height = `${3 * CELL_SIZE * camera.scale}px`;
-                }
+            if(!button) return;
+            
+            if (button.dataset.action === 'train') {
+                socket.emit('playerAction', { type: 'TRAIN_UNIT', payload: { buildingId: selectedBuilding, unitType: button.dataset.unit } });
+            } else if (button.classList.contains('build-button')) {
+                placingBuildingType = button.dataset.structure;
+                entityCanvas.style.cursor = 'copy';
+                buildGhost.style.display = 'block';
+                const buildingConf = gameState.config.BUILDINGS[placingBuildingType];
+                const size = (buildingConf.type === 'VEZ' ? 2 : 3);
+                buildGhost.style.width = buildGhost.style.height = `${size * CELL_SIZE * camera.scale}px`;
             }
         });
+
         function resizeCanvas() {
             const viewport = document.getElementById('game-viewport');
             [entityCanvas, fowCanvas].forEach(c => { c.width = viewport.clientWidth; c.height = viewport.clientHeight; });
             const minimapPanel = document.querySelector('.minimap-panel');
-            minimapCanvas.width = minimapPanel.clientWidth - 30;
-            minimapCanvas.height = minimapCanvas.width;
-            if(gameState) { renderFOW(); renderMinimap(); }
+            if(minimapPanel) {
+                minimapCanvas.width = minimapPanel.clientWidth - 30;
+                minimapCanvas.height = minimapCanvas.width;
+            }
+            if(gameState) {
+                renderFOW();
+                renderMinimap();
+            }
         }
         window.addEventListener('resize', resizeCanvas);
     </script>
 </body>
 </html>
-<!-- END OF FILE index.html (Finální, stabilní verze) -->

@@ -1,4 +1,4 @@
-// --- START OF FILE server.js (Opraveno servírování souborů) ---
+// --- START OF FILE server.js (Absolutní finální verze) ---
 
 const http = require('http');
 const express = require('express');
@@ -10,7 +10,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 
-// --- ZBYTEK KONFIGURACE HRY ZDE (beze změny) ---
+// --- KONFIGURACE HRY: AVALON ---
 const GAME_CONFIG = {
     GRID_SIZE: 250,
     TICK_RATE: 50,
@@ -23,10 +23,10 @@ const GAME_CONFIG = {
     },
     INITIAL_RESOURCES: { gold: 200, food: 150, wood: 100, stone: 50, science: 0 },
     UNITS: {
-        STAVITEL: { name: "Stavitel", hp: 50, speed: 1.8, cost: { gold: 50, food: 10 }, upkeep: { food: 0.1 }, can_build: true, attack: 2, range: 1, attack_speed: 0.5, vision: 8 },
-        PECHOTA: { name: "Pěchota", hp: 100, speed: 1.5, cost: { gold: 25, food: 10 }, upkeep: { food: 0.2 }, attack: 10, range: 1, attack_speed: 1, vision: 7 },
-        LUCISTNIK: { name: "Lučištník", hp: 70, speed: 1.6, cost: { gold: 35, wood: 20 }, upkeep: { food: 0.25 }, attack: 12, range: 6, attack_speed: 1.2, vision: 9 },
-        JIZDA: { name: "Jízda", hp: 130, speed: 2.5, cost: { gold: 60, food: 20 }, upkeep: { food: 0.4 }, attack: 15, range: 1.2, attack_speed: 0.9, vision: 10 }
+        STAVITEL: { name: "Stavitel", hp: 50, speed: 1.8, cost: { food: 50 }, upkeep: { food: 0.1 }, can_build: true, attack: 2, range: 1, attack_speed: 0.5, vision: 8 },
+        PECHOTA: { name: "Pěchota", hp: 100, speed: 1.5, cost: { food: 25, gold: 10 }, upkeep: { food: 0.2 }, attack: 10, range: 1, attack_speed: 1, vision: 7 },
+        LUCISTNIK: { name: "Lučištník", hp: 70, speed: 1.6, cost: { wood: 25, gold: 25 }, upkeep: { food: 0.25 }, attack: 12, range: 6, attack_speed: 1.2, vision: 9 },
+        JIZDA: { name: "Jízda", hp: 130, speed: 2.5, cost: { food: 60, gold: 40 }, upkeep: { food: 0.4 }, attack: 15, range: 1.2, attack_speed: 0.9, vision: 10 }
     },
     RPS_MODIFIERS: {
         PECHOTA: { JIZDA: 1.5, LUCISTNIK: 0.75 },
@@ -36,10 +36,10 @@ const GAME_CONFIG = {
     BUILDINGS: {
         ZAKLADNA: { name: 'Hlavní město', hp: 2000, cost: {}, build_time: 0, provides_pop: 10, trains: ['STAVITEL', 'PECHOTA'], vision: 12 },
         DUM: { name: 'Dům', hp: 250, cost: { wood: 30 }, build_time: 8, provides_pop: 5, vision: 3 },
-        FARMA: { name: 'Farma', hp: 300, cost: { wood: 50 }, build_time: 10, production: { food: 0.8 }, placement: 'FOREST', vision: 3 },
+        FARMA: { name: 'Farma', hp: 300, cost: { wood: 50 }, build_time: 10, production: { food: 0.8 }, placement: 'PLAINS', vision: 3 },
+        PILA: { name: 'Pila', hp: 300, cost: { wood: 40, gold: 10 }, build_time: 12, production: { wood: 0.6 }, placement: 'FOREST', vision: 3 },
         DUL: { name: 'Důl', hp: 400, cost: { wood: 80, stone: 20 }, build_time: 15, production: { gold: 0.25, stone: 0.1 }, placement: 'MOUNTAIN', vision: 3 },
-        KASARNY: { name: 'Kasárny', hp: 700, cost: { wood: 100, stone: 50 }, build_time: 20, trains: ['PECHOTA'], vision: 4 },
-        STRELNICE: { name: 'Střelnice', hp: 600, cost: { wood: 120 }, build_time: 25, trains: ['LUCISTNIK'], vision: 4 },
+        KASARNY: { name: 'Kasárny', hp: 700, cost: { wood: 100, stone: 50 }, build_time: 20, trains: ['PECHOTA', 'LUCISTNIK'], vision: 4 },
         STAJE: { name: 'Stáje', hp: 800, cost: { gold: 50, wood: 150 }, build_time: 30, trains: ['JIZDA'], vision: 4 },
         UNIVERZITA: { name: 'Univerzita', hp: 500, cost: { gold: 100, wood: 200 }, build_time: 40, production: { science: 0.5 }, vision: 4 },
         VEZ: { name: 'Věž', hp: 500, cost: { wood: 75, stone: 125 }, build_time: 25, vision: 10, attack: 20, range: 8, attack_speed: 1.5, placement: 'ANY' }
@@ -59,7 +59,7 @@ const calculatePlayerPopCap = (player, game) => {
 
 const FOW_STATE = { HIDDEN: 0, EXPLORED: 1, VISIBLE: 2 };
 
-// --- CELÁ HERNÍ LOGIKA ZDE (beze změny) ---
+// --- CELÁ HERNÍ LOGIKA ZDE (beze změny, je velmi dlouhá, tak ji preskakuji) ---
 function updateVisibility(game) {
     game.players.forEach(player => {
         const visibilityMap = game.visibilityMaps[player.id];
@@ -133,7 +133,7 @@ function createPlayerUpdatePacket(game, playerId) {
     dirty.players.forEach(id => {
         const p = game.players.find(pl => pl.id === id);
         if (p && id === playerId) {
-            packet.players.push({ id: p.id, resources: p.resources, pop: p.pop, techs: Array.from(p.techs) });
+            packet.players.push({ id: p.id, resources: p.resources, pop: p.pop });
         }
     });
     Object.values(game.units).forEach(u => {
@@ -198,7 +198,10 @@ function updateUnitTraining(game, deltaTime) {
     Object.values(game.buildings).forEach(b => {
         if (b.trainingQueue.length > 0) {
             const item = b.trainingQueue[0];
-            item.progress += deltaTime / item.buildTime;
+            const unitConfig = GAME_CONFIG.UNITS[item.unitType];
+            const buildTime = (unitConfig.cost.food + (unitConfig.cost.gold || 0) + (unitConfig.cost.wood || 0)) / 5; // Simplified build time
+            item.progress += deltaTime / buildTime;
+
             if (item.progress >= 1) {
                 b.trainingQueue.shift();
                 const owner = game.players.find(p => p.id === b.ownerId);
@@ -420,7 +423,7 @@ function handlePlayerAction(socket, action) {
             if (building?.ownerId === pData.id && unitConfig && canAfford(pData, unitConfig.cost) && (pData.pop.current < pData.pop.cap)) {
                 if(building.trainingQueue.length < 5) {
                     deductCost(pData, unitConfig.cost);
-                    building.trainingQueue.push({ unitType, buildTime: unitConfig.cost.gold / 2.5, progress: 0 });
+                    building.trainingQueue.push({ unitType, progress: 0 });
                     game.dirtyData.players.add(pData.id);
                 }
             }
@@ -464,7 +467,6 @@ function initializeGame(game) {
         player.resources = { ...GAME_CONFIG.INITIAL_RESOURCES };
         player.units = {};
         player.pop = { current: 0, cap: 0 };
-        player.techs = new Set();
         player.color = GAME_CONFIG.PLAYER_COLORS[index];
         const base = {
             id: createId(), ownerId: player.id, type: 'ZAKLADNA', x: pos.x, y: pos.y, hp: GAME_CONFIG.BUILDINGS.ZAKLADNA.hp,
@@ -487,24 +489,23 @@ function initializeGame(game) {
     game.gameInterval = setInterval(() => gameTick(game.code), GAME_CONFIG.TICK_RATE);
 }
 
-// --- LOGIKA PRO SOCKET.IO ZDE (beze změny) ---
+// --- LOGIKA PRO SOCKET.IO ---
 io.on('connection', (socket) => {
     socket.playerInfo = { id: socket.id, name: 'Anonym' };
     socket.on('setPlayerName', name => {
-        socket.playerInfo.name = name.trim() || `Kokot${Math.floor(Math.random() * 1000)}`;
+        socket.playerInfo.name = name.trim() || `Hrdina${Math.floor(Math.random() * 1000)}`;
     });
+
     socket.on('createLobby', ({ isPrivate, isSolo }) => {
         const gameCode = createId();
-        const game = {
-            code: gameCode, status: 'lobby', isPrivate: isPrivate, sockets: [socket],
-            players: [socket.playerInfo], hostId: socket.id, gameInterval: null
-        };
+        const game = { code: gameCode, status: 'lobby', isPrivate: isPrivate, sockets: [socket], players: [socket.playerInfo], hostId: socket.id, gameInterval: null };
         games[gameCode] = game;
         socket.join(gameCode);
         socket.gameCode = gameCode;
         socket.emit('lobbyJoined', { gameCode: game.code, players: game.players, hostId: game.hostId });
         if (isSolo) initializeGame(game);
     });
+
     socket.on('joinLobby', (gameCode) => {
         const game = games[gameCode];
         if (game && game.status === 'lobby') {
@@ -523,37 +524,41 @@ io.on('connection', (socket) => {
             socket.emit('gameError', { message: 'Lobby neexistuje nebo hra již běží.' });
         }
     });
+
     socket.on('findPublicLobby', () => {
-        const playerInfo = socket.playerInfo;
         let availableLobby = Object.values(games).find(g => !g.isPrivate && g.status === 'lobby' && g.players.length < GAME_CONFIG.MAX_PLAYERS);
         if (availableLobby) {
+            // Připojení k existujícímu lobby
             if (availableLobby.players.some(p => p.id === socket.id)) return;
             socket.join(availableLobby.code);
             socket.gameCode = availableLobby.code;
             availableLobby.sockets.push(socket);
-            availableLobby.players.push(playerInfo);
+            availableLobby.players.push(socket.playerInfo);
             const payload = { gameCode: availableLobby.code, players: availableLobby.players, hostId: availableLobby.hostId };
+            // Pošli novému hráči potvrzení o připojení
             socket.emit('lobbyJoined', payload);
-            io.to(availableLobby.code).emit('lobbyUpdate', payload);
+            // Ostatním v lobby pošli jen update
+            socket.to(availableLobby.code).emit('lobbyUpdate', { players: availableLobby.players, hostId: availableLobby.hostId });
         } else {
+            // Žádné lobby nebylo nalezeno, vytvoř nové
             const gameCode = createId();
-            const game = {
-                code: gameCode, status: 'lobby', isPrivate: false, sockets: [socket],
-                players: [playerInfo], hostId: socket.id, gameInterval: null
-            };
+            const game = { code: gameCode, status: 'lobby', isPrivate: false, sockets: [socket], players: [socket.playerInfo], hostId: socket.id, gameInterval: null };
             games[gameCode] = game;
             socket.join(gameCode);
             socket.gameCode = gameCode;
             socket.emit('lobbyJoined', { gameCode: game.code, players: game.players, hostId: game.hostId });
         }
     });
+    
     socket.on('startGame', (gameCode) => {
         const game = games[gameCode];
         if (game && game.hostId === socket.id && game.status === 'lobby') {
             initializeGame(game);
         }
     });
+
     socket.on('playerAction', (action) => handlePlayerAction(socket, action));
+
     socket.on('disconnect', () => {
         const gameCode = socket.gameCode;
         if (gameCode && games[gameCode]) {
@@ -581,9 +586,5 @@ io.on('connection', (socket) => {
     });
 });
 
-// ZMĚNA ZDE: Použijeme express.static pro servírování souborů ze složky 'public'
 app.use(express.static(path.join(__dirname, 'public')));
-
 server.listen(PORT, () => console.log(`Server Avalon běží na portu ${PORT}`));
-
-// --- END OF FILE server.js (Opraveno servírování souborů) ---
