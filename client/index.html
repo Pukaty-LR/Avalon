@@ -1,31 +1,14 @@
-<!-- START OF FILE client/index.html (OPRAVENÁ VERZE) -->
+<!-- START OF FILE client/index.html (FINÁLNÍ OPRAVA) -->
 <!DOCTYPE html>
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
     <title>AVALON: Zrození Impéria</title>
     <link rel="stylesheet" href="/styl.css">
-    <!-- NOVINKA: Styl pro kick button -->
     <style>
-        .kick-btn {
-            margin-left: auto;
-            background-color: #e74c3c;
-            color: white;
-            border: none;
-            padding: 3px 8px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 0.8em;
-            opacity: 0.7;
-            transition: opacity 0.2s;
-        }
-        .kick-btn:hover {
-            opacity: 1;
-        }
-        #playerList li {
-            display: flex;
-            align-items: center;
-        }
+        .kick-btn { margin-left: auto; background-color: #e74c3c; color: white; border: none; padding: 3px 8px; border-radius: 3px; cursor: pointer; font-size: 0.8em; opacity: 0.7; transition: opacity 0.2s; }
+        .kick-btn:hover { opacity: 1; }
+        #playerList li { display: flex; align-items: center; }
     </style>
 </head>
 <body>
@@ -36,7 +19,6 @@
             <input type="text" id="playerNameInput" placeholder="Jméno tvého rodu...">
             <button id="soloGameBtn">Hra pro jednoho</button>
             <button id="findGameBtn">Najít veřejnou hru</button>
-            <!-- ZMĚNA: Tlačítko přejmenováno -->
             <button id="createGameBtn">Vytvořit hru</button>
             <div class="join-game-form">
                 <input type="text" id="joinCodeInput" placeholder="Kód hry...">
@@ -55,12 +37,45 @@
         </div>
     </div>
 
-    <!-- Herní sekce zůstává beze změny -->
     <div id="game-section" style="display: none;">
-        <!-- ... obsah game-section ... -->
+        <div class="top-bar">
+            <div class="resource-panel">
+                <div class="resource" title="Zlato">💰 <span id="gold-display">0</span></div>
+                <div class="resource" title="Jídlo">🍖 <span id="food-display">0</span></div>
+                <div class="resource" title="Dřevo">🌲 <span id="wood-display">0</span></div>
+                <div class="resource" title="Kámen">⛏️ <span id="stone-display">0</span></div>
+                <div class="resource" title="Věda">📚 <span id="science-display">0</span></div>
+            </div>
+             <div class="resource-panel">
+                <div class="resource" title="Populace / Limit">🧑‍🤝‍🧑 <span id="pop-display">0/0</span></div>
+             </div>
+        </div>
+        <div id="game-container">
+            <div id="game-viewport">
+                <canvas id="entity-canvas"></canvas>
+                <canvas id="fow-canvas"></canvas>
+                <div id="build-ghost"></div>
+                <div id="selection-box"></div>
+            </div>
+            <div class="right-panel">
+                 <div class="selection-panel">
+                    <h3 id="selection-name">Nic nevybráno</h3>
+                    <div id="selection-details"></div>
+                    <div id="selection-actions"></div>
+                </div>
+                <div class="minimap-panel">
+                    <h4>Mapa Vlivu</h4>
+                    <canvas id="minimap"></canvas>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
+    <!-- ZDE JE KLÍČOVÁ ZMĚNA -->
+    <!-- Načteme konfiguraci jako první, vytvoří globální proměnnou GAME_CONFIG -->
+    <script src="/shared/config.js"></script>
+    <!-- Teprve poté načteme hlavní skript jako modul, který tuto proměnnou použije -->
     <script src="/js/main.js" type="module"></script>
 </body>
 </html>
