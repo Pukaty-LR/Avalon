@@ -1,59 +1,47 @@
-// --- START OF FILE client/js/main.js ---
-
-// Importujeme naše moduly. Díky 'type="module"' v HTML to funguje.
+// --- START OF FILE client/js/main.js (OPRAVENÁ VERZE) ---
 import { network } from './network.js';
 import { game } from './game.js';
 
-// --- ELEMENTY DOM ---
-// Všechny elementy, se kterými budeme manipulovat, si načteme na začátku.
-
-// Obrazovky
 const mainMenuSection = document.getElementById('main-menu-section');
 const lobbySection = document.getElementById('lobby-section');
 const gameSection = document.getElementById('game-section');
-
-// Vstupy a tlačítka v menu
 const playerNameInput = document.getElementById('playerNameInput');
 const soloGameBtn = document.getElementById('soloGameBtn');
 const findGameBtn = document.getElementById('findGameBtn');
 const createGameBtn = document.getElementById('createGameBtn');
 const joinCodeInput = document.getElementById('joinCodeInput');
 const joinGameBtn = document.getElementById('joinGameBtn');
-
-// Elementy v lobby
 const lobbyGameCode = document.getElementById('lobby-game-code');
 const playerList = document.getElementById('playerList');
 const startGameBtn = document.getElementById('startGameBtn');
 const waitingMessage = document.getElementById('waiting-message');
 
-// --- GLOBÁLNÍ STAV KLIENTA ---
 let myId = null;
 let currentLobbyState = {};
 
-// --- FUNKCE PRO SPRÁVU UI ---
-
-/**
- * Zobrazí specifikovanou obrazovku a skryje ostatní.
- * @param {'main-menu' | 'lobby' | 'game'} screenName - Název obrazovky k zobrazení.
- */
 const showScreen = (screenName) => {
     mainMenuSection.style.display = 'none';
     lobbySection.style.display = 'none';
     gameSection.style.display = 'none';
-
     document.getElementById(`${screenName}-section`).style.display = 'flex';
 };
 
-/**
- * Aktualizuje zobrazení lobby na základě dat ze serveru.
- * @param {object} data - Data o lobby (gameCode, players, hostId).
- */
 const updateLobbyView = (data) => {
     currentLobbyState = data;
     lobbyGameCode.textContent = data.gameCode;
-    playerList.innerHTML = data.players.map(p => 
-        `<li class="${p.id === data.hostId ? 'host' : ''}">${p.name} ${p.id === data.hostId ? '(Host)' : ''}</li>`
-    ).join('');
+    
+    // NOVINKA: Vykreslení seznamu hráčů s kick tlačítky pro hosta
+    playerList.innerHTML = data.players.map(p => {
+        let kickButtonHtml = '';
+        // Pokud jsem host a dívám se na jiného hráče, zobrazím kick button
+        if (myId === data.hostId && p.id !== myId) {
+            kickButtonHtml = `<button class="kick-btn" data-kick-id="${p.id}">Vyhodit</button>`;
+        }
+        return `<li class="${p.id === data.hostId ? 'host' : ''}">
+                    <span>${p.name} ${p.id === data.hostId ? '(Host)' : ''}</span>
+                    ${kickButtonHtml}
+                </li>`;
+    }).join('');
 
     if (myId === data.hostId) {
         startGameBtn.style.display = 'block';
@@ -65,33 +53,42 @@ const updateLobbyView = (data) => {
     showScreen('lobby');
 };
 
-// --- PŘIPOJENÍ EVENT LISTENERŮ ---
-
-const preActionNameSet = () => {
-    if (playerNameInput.value.trim()) {
-        network.sendPlayerName(playerNameInput.value);
+// NOVINKA: Logika pro jméno (cachování, náhodné jméno)
+const preparePlayerName = () => {
+    let name = playerNameInput.value.trim();
+    if (!name) {
+        // Pokud je jméno prázdné, vygeneruj náhodné
+        name = `Rytíř${Math.floor(Math.random() * 900 + 100)}`;
+        playerNameInput.value = name;
     }
+    // Ulož jméno do localStorage pro příští návštěvu
+    localStorage.setItem('avalonPlayerName', name);
+    network.sendPlayerName(name);
 };
 
+// NOVINKA: Logika tlačítek přesně podle požadavků
 soloGameBtn.addEventListener('click', () => {
-    preActionNameSet();
+    preparePlayerName();
+    // Vytvoří sólo hru, která se rovnou spustí (logika na serveru)
     network.sendCreateLobby({ isPrivate: true, isSolo: true });
 });
 
 findGameBtn.addEventListener('click', () => {
-    preActionNameSet();
+    preparePlayerName();
+    // Najde veřejné lobby, nebo vytvoří nové, pokud žádné není
     network.sendFindPublicLobby();
 });
 
 createGameBtn.addEventListener('click', () => {
-    preActionNameSet();
-    network.sendCreateLobby({ isPrivate: true, isSolo: false });
+    preparePlayerName();
+    // Vytvoří nové VEŘEJNÉ lobby, aby ho "Najít hru" našlo
+    network.sendCreateLobby({ isPrivate: false, isSolo: false });
 });
 
 joinGameBtn.addEventListener('click', () => {
     const code = joinCodeInput.value.trim().toUpperCase();
     if (code) {
-        preActionNameSet();
+        preparePlayerName();
         network.sendJoinLobby(code);
     }
 });
@@ -102,40 +99,42 @@ startGameBtn.addEventListener('click', () => {
     }
 });
 
-// --- REGISTRACE CALLBACKŮ PRO SÍŤOVOU KOMUNIKACI ---
-// Říkáme modulu 'network', co má dělat, když přijdou data.
+// NOVINKA: Listener pro kliknutí na kick button
+playerList.addEventListener('click', (e) => {
+    if (e.target.classList.contains('kick-btn')) {
+        const playerIdToKick = e.target.dataset.kickId;
+        if (playerIdToKick) {
+            network.sendKickPlayer(playerIdToKick);
+        }
+    }
+});
 
+// Registrace síťových callbacků
 network.on('onConnect', (id) => {
     myId = id;
+    // NOVINKA: Načtení jména z cache po připojení
+    const cachedName = localStorage.getItem('avalonPlayerName');
+    if (cachedName) {
+        playerNameInput.value = cachedName;
+    }
     showScreen('main-menu');
 });
-
-network.on('onLobbyUpdate', (data) => {
-    updateLobbyView(data);
-});
-
+network.on('onLobbyUpdate', updateLobbyView);
 network.on('onGameStart', (initialPacket) => {
     showScreen('game');
-    // Předáváme řízení modulu 'game', který se postará o zbytek.
     game.initialize(initialPacket, myId);
 });
-
-network.on('onGameUpdate', (update) => {
-    // Příchozí aktualizace stavu hry předáváme přímo hernímu modulu.
-    game.handleStateUpdate(update);
-});
-
+network.on('onGameUpdate', game.handleStateUpdate);
 network.on('onGameOver', ({ reason }) => {
-    // Modul 'game' ukončí svou smyčku a my zobrazíme zprávu.
     game.shutdown();
     alert(`Konec hry! ${reason}`);
     location.reload();
 });
+// NOVINKA: Co dělat, když mě někdo vyhodí
+network.on('onKicked', ({ reason }) => {
+    alert(reason);
+    showScreen('main-menu');
+});
 
-
-// --- INICIALIZACE APLIKACE ---
-// Zobrazíme úvodní obrazovku.
 showScreen('main-menu');
-console.log("Client application main.js initialized.");
-
 // --- END OF FILE client/js/main.js ---
