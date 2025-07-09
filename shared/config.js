@@ -1,14 +1,11 @@
 // --- START OF FILE shared/config.js (OPRAVENÁ VERZE) ---
 
-// Používáme CommonJS syntaxi (module.exports), se kterou si poradí
-// jak serverový 'require', tak i klientský 'import'.
-
 const GAME_CONFIG = {
     GRID_SIZE: 250,
     TICK_RATE: 50,
-    MAX_PLAYERS: 8,
+    MAX_PLAYERS: 8, // ZVÝŠENO NA 8
     PLAYER_COLORS: ['#4caf50', '#f44336', '#2196f3', '#ffc107', '#9c27b0', '#ff9800', '#00bcd4', '#e91e63'],
-    TERRAIN: {
+    TERRAIN: { /* ... zbytek souboru beze změny ... */
         PLAINS: { name: 'Roviny', movement_cost: 1.0, buildable: true, color: '#a5d6a7' },
         FOREST: { name: 'Les', movement_cost: 1.5, buildable: true, color: '#388e3c' },
         MOUNTAIN: { name: 'Hory', movement_cost: 2.5, buildable: true, color: '#795548' }
@@ -38,7 +35,5 @@ const GAME_CONFIG = {
     }
 };
 
-// Exportujeme objekt, aby ho bylo možné načíst pomocí 'require' na serveru.
 module.exports = { GAME_CONFIG };
-
 // --- END OF FILE shared/config.js ---
