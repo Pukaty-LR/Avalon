@@ -1,11 +1,9 @@
-// --- START OF FILE shared/config.js ---
+// --- START OF FILE shared/config.js (OPRAVENÁ VERZE) ---
 
-/**
- * Toto je JEDEN ZDROJ PRAVDY pro veškerou herní konfiguraci.
- * Tento soubor je sdílen mezi serverem a klientem, aby se zajistila konzistence dat.
- * Jakákoliv změna zde (např. cena jednotky) se automaticky projeví v celé hře.
- */
-export const GAME_CONFIG = {
+// Používáme CommonJS syntaxi (module.exports), se kterou si poradí
+// jak serverový 'require', tak i klientský 'import'.
+
+const GAME_CONFIG = {
     GRID_SIZE: 250,
     TICK_RATE: 50,
     MAX_PLAYERS: 8,
@@ -39,5 +37,8 @@ export const GAME_CONFIG = {
         VEZ: { name: 'Věž', hp: 500, cost: { wood: 75, stone: 125 }, build_time: 25, vision: 10, attack: 20, range: 8, attack_speed: 1.5, placement: 'ANY' }
     }
 };
+
+// Exportujeme objekt, aby ho bylo možné načíst pomocí 'require' na serveru.
+module.exports = { GAME_CONFIG };
 
 // --- END OF FILE shared/config.js ---
