@@ -1,5 +1,4 @@
-// --- START OF FILE server/lobbyManager.js (OPRAVENÁ VERZE) ---
-
+// --- START OF FILE server/lobbyManager.js (FINÁLNÍ OPRAVENÁ VERZE) ---
 const { GameInstance } = require('./gameInstance.js');
 const { GAME_CONFIG } = require('../shared/config.js');
 
@@ -12,24 +11,19 @@ class LobbyManager {
     }
 
     handleNewConnection(socket) {
-        socket.playerInfo = { id: socket.id, name: `Anonym${Math.floor(Math.random() * 1000)}` };
-
-        // Tyto listenery jsou pouze pro dobu, kdy je hráč v menu/lobby
+        socket.playerInfo = { id: socket.id, name: `Rytíř${Math.floor(Math.random() * 1000)}` };
         socket.on('setPlayerName', (name) => {
-            const trimmedName = name.trim();
-            if (trimmedName) {
-                socket.playerInfo.name = trimmedName;
-            }
+            if (name && name.trim()) socket.playerInfo.name = name.trim();
         });
         socket.on('createLobby', ({ isPrivate, isSolo }) => this.createLobby(socket, { isPrivate, isSolo }));
         socket.on('joinLobby', (gameCode) => this.joinLobby(socket, gameCode));
         socket.on('findPublicLobby', () => this.findPublicLobby(socket));
         socket.on('startGame', (gameCode) => this.startGame(socket, gameCode));
+        socket.on('kickPlayer', (playerId) => this.kickPlayer(socket, playerId));
         socket.on('disconnect', () => this.handleDisconnect(socket));
     }
 
     createLobby(socket, { isPrivate, isSolo }) {
-        // ... (tato metoda zůstává beze změny)
         const gameCode = createId();
         const game = {
             code: gameCode,
@@ -42,39 +36,35 @@ class LobbyManager {
         this.games[gameCode] = game;
         socket.join(gameCode);
         socket.gameCode = gameCode;
-        socket.emit('lobbyJoined', {
-            gameCode: game.code,
-            players: game.players,
-            hostId: game.hostId,
-        });
+        
+        // NOVINKA: Sólo hra se spouští okamžitě bez lobby
         if (isSolo) {
             this.startGame(socket, gameCode);
+            return;
         }
+
+        socket.emit('lobbyJoined', { gameCode, players: game.players, hostId: game.hostId });
     }
 
     joinLobby(socket, gameCode) {
-        // ... (tato metoda zůstává beze změny)
         const game = this.games[gameCode];
-        if (game && game.status === 'lobby') {
-            if (game.players.some(p => p.id === socket.id)) return;
-            if (game.players.length >= GAME_CONFIG.MAX_PLAYERS) {
-                return socket.emit('gameError', { message: 'Lobby je plné.' });
-            }
-            socket.join(gameCode);
-            socket.gameCode = gameCode;
-            game.sockets.push(socket);
-            game.players.push(socket.playerInfo);
-            const payload = { gameCode: game.code, players: game.players, hostId: game.hostId };
-            socket.emit('lobbyJoined', payload);
-            socket.to(gameCode).emit('lobbyUpdate', payload);
-        } else {
-            socket.emit('gameError', { message: 'Lobby neexistuje nebo hra již běží.' });
+        if (!game || game.status !== 'lobby') {
+            return socket.emit('gameError', { message: 'Lobby neexistuje nebo hra již běží.' });
         }
+        if (game.players.some(p => p.id === socket.id)) return;
+        if (game.players.length >= GAME_CONFIG.MAX_PLAYERS) {
+            return socket.emit('gameError', { message: 'Lobby je plné.' });
+        }
+        socket.join(gameCode);
+        socket.gameCode = gameCode;
+        game.sockets.push(socket);
+        game.players.push(socket.playerInfo);
+        const payload = { gameCode: game.code, players: game.players, hostId: game.hostId };
+        this.io.to(gameCode).emit('lobbyUpdate', payload);
     }
 
     findPublicLobby(socket) {
-        // ... (tato metoda zůstává beze změny)
-        let availableLobby = Object.values(this.games).find(
+        const availableLobby = Object.values(this.games).find(
             g => !g.isPrivate && g.status === 'lobby' && g.players.length < GAME_CONFIG.MAX_PLAYERS
         );
         if (availableLobby) {
@@ -88,31 +78,48 @@ class LobbyManager {
         const game = this.games[gameCode];
         if (game && game.hostId === socket.id && game.status === 'lobby') {
             game.status = 'running';
-            
-            // OPRAVA: Předáme celé pole socketů do herní instance.
             game.instance = new GameInstance(game.code, game.players, game.sockets, this.io);
             game.instance.initializeGame();
-
-            // OPRAVA: Po startu hry odstraníme z hráčských socketů listenery pro lobby,
-            // abychom předešli nechtěnému chování.
             game.sockets.forEach(s => {
                 s.removeAllListeners('createLobby');
                 s.removeAllListeners('joinLobby');
                 s.removeAllListeners('findPublicLobby');
                 s.removeAllListeners('startGame');
+                s.removeAllListeners('kickPlayer');
             });
         }
     }
     
+    // NOVINKA: Metoda pro vyhození hráče
+    kickPlayer(hostSocket, playerIdToKick) {
+        const gameCode = hostSocket.gameCode;
+        const game = this.games[gameCode];
+        if (!game || game.hostId !== hostSocket.id) return; // Bezpečnostní kontrola
+
+        const kickedSocket = game.sockets.find(s => s.id === playerIdToKick);
+        if (kickedSocket) {
+            kickedSocket.emit('kicked', { reason: 'Host tě vykopl z lobby.' });
+            kickedSocket.leave(gameCode);
+
+            game.sockets = game.sockets.filter(s => s.id !== playerIdToKick);
+            game.players = game.players.filter(p => p.id !== playerIdToKick);
+
+            this.io.to(gameCode).emit('lobbyUpdate', {
+                gameCode: game.code,
+                players: game.players,
+                hostId: game.hostId
+            });
+        }
+    }
+
     handleDisconnect(socket) {
-        // ... (tato metoda zůstává beze změny)
-        console.log(`A hero has fallen: ${socket.id}`);
         const gameCode = socket.gameCode;
         if (!gameCode || !this.games[gameCode]) return;
         const game = this.games[gameCode];
+        const wasHost = socket.id === game.hostId;
         game.sockets = game.sockets.filter(s => s.id !== socket.id);
-        const playerIndex = game.players.findIndex(p => p.id === socket.id);
-        if (playerIndex > -1) game.players.splice(playerIndex, 1);
+        game.players = game.players.filter(p => p.id !== socket.id);
+        
         if (game.status === 'running') {
             this.io.to(game.code).emit('gameOver', { reason: `${socket.playerInfo.name} opustil bojiště.` });
             if (game.instance) game.instance.stopGame();
@@ -121,7 +128,7 @@ class LobbyManager {
             if (game.players.length === 0) {
                 delete this.games[gameCode];
             } else {
-                if (socket.id === game.hostId) game.hostId = game.players[0].id;
+                if (wasHost) game.hostId = game.players[0].id;
                 this.io.to(game.code).emit('lobbyUpdate', {
                     gameCode: game.code, players: game.players, hostId: game.hostId
                 });
