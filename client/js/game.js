@@ -1,9 +1,8 @@
-// --- START OF FILE client/js/game.js (FINÁLNÍ OPRAVENÁ VERZE) ---
+// --- START OF FILE client/js/game.js (FINÁLNÍ OPRAVA) ---
 
-// OPRAVA JE ZDE:
-// Místo importu neexistujícího 'default' exportu, importujeme přímo
-// pojmenovaný export 'GAME_CONFIG'. Toto je správný způsob.
-import { GAME_CONFIG } from '../../shared/config.js';
+// ZDE JE KLÍČOVÁ ZMĚNA:
+// Už se nesnažíme importovat konfiguraci. Použijeme globální proměnnou,
+// kterou pro nás připravil index.html. Je to 100% spolehlivé.
 import { network } from './network.js';
 
 // --- STAV HRY A PROMĚNNÉ ---
@@ -29,32 +28,26 @@ const buildGhost = document.getElementById('build-ghost');
 const selectionBox = document.getElementById('selection-box');
 
 // --- HERNÍ SMYČKA ---
-
 function gameLoop() {
     animationFrameId = requestAnimationFrame(gameLoop);
     if (!gameState) return;
-    
     entityCtx.clearRect(0, 0, entityCanvas.width, entityCanvas.height);
     entityCtx.save();
     entityCtx.translate(camera.x, camera.y);
     entityCtx.scale(camera.scale, camera.scale);
-
     renderBoard(entityCtx);
     renderEntities(entityCtx);
     renderEffects(entityCtx);
-
     entityCtx.restore();
 }
 
-// --- RENDEROVACÍ FUNKCE (beze změny) ---
-
+// --- RENDEROVACÍ FUNKCE (zbytek kódu je identický) ---
 function renderBoard(ctx) {
     const { GRID_SIZE, TERRAIN } = gameState.config;
     const startX = Math.floor(-camera.x / (CELL_SIZE * camera.scale));
     const startY = Math.floor(-camera.y / (CELL_SIZE * camera.scale));
     const endX = startX + Math.ceil(entityCanvas.width / (CELL_SIZE * camera.scale)) + 1;
     const endY = startY + Math.ceil(entityCanvas.height / (CELL_SIZE * camera.scale)) + 1;
-
     for (let y = Math.max(0, startY); y < Math.min(GRID_SIZE, endY); y++) {
         for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
              const state = visibilityMap[y * GRID_SIZE + x];
@@ -65,20 +58,17 @@ function renderBoard(ctx) {
         }
     }
 }
-
 function renderFOW() {
     if (!gameState || !visibilityMap) return;
     fowCtx.clearRect(0, 0, fowCanvas.width, fowCanvas.height);
     fowCtx.save();
     fowCtx.translate(camera.x, camera.y);
     fowCtx.scale(camera.scale, camera.scale);
-
     const { GRID_SIZE } = gameState.config;
     const startX = Math.floor(-camera.x / (CELL_SIZE * camera.scale));
     const startY = Math.floor(-camera.y / (CELL_SIZE * camera.scale));
     const endX = startX + Math.ceil(fowCanvas.width / (CELL_SIZE * camera.scale)) + 1;
     const endY = startY + Math.ceil(fowCanvas.height / (CELL_SIZE * camera.scale)) + 1;
-
     for (let y = Math.max(0, startY); y < Math.min(GRID_SIZE, endY); y++) {
         for (let x = Math.max(0, startX); x < Math.min(GRID_SIZE, endX); x++) {
              const state = visibilityMap[y * GRID_SIZE + x];
@@ -93,19 +83,16 @@ function renderFOW() {
     }
     fowCtx.restore();
 }
-
 function renderEntities(ctx) {
     gameState.buildings.forEach(b => {
         const pColor = gameState.players.get(b.ownerId)?.color || 'grey';
         ctx.fillStyle = pColor;
         const b_size = (GAME_CONFIG.BUILDINGS[b.type]?.name === 'Věž' ? 2 : 3);
         ctx.fillRect(b.x * CELL_SIZE, b.y * CELL_SIZE, b_size * CELL_SIZE, b_size * CELL_SIZE);
-        
         if (b.type === 'FARMA') { ctx.fillStyle = '#27ae60'; ctx.fillRect((b.x + 0.5) * CELL_SIZE, (b.y + 0.5) * CELL_SIZE, 2 * CELL_SIZE, 2 * CELL_SIZE); }
         if (b.type === 'DUL') { ctx.fillStyle = '#7f8c8d'; ctx.fillRect((b.x + 0.5) * CELL_SIZE, (b.y + 0.5) * CELL_SIZE, 2 * CELL_SIZE, 2 * CELL_SIZE); }
         if (b.type === 'VEZ') { ctx.fillStyle = '#bdc3c7'; ctx.fillRect((b.x + 0.5) * CELL_SIZE, (b.y + 0.5) * CELL_SIZE, 1 * CELL_SIZE, 1 * CELL_SIZE); }
         if (b.type === 'PILA') { ctx.fillStyle = '#8c5a2b'; ctx.beginPath(); ctx.moveTo((b.x+0.5)*CELL_SIZE, (b.y+2.5)*CELL_SIZE); ctx.lineTo((b.x+1.5)*CELL_SIZE, (b.y+0.5)*CELL_SIZE); ctx.lineTo((b.x+2.5)*CELL_SIZE, (b.y+2.5)*CELL_SIZE); ctx.closePath(); ctx.fill(); }
-
         ctx.strokeStyle = '#000';
         ctx.strokeRect(b.x * CELL_SIZE, b.y * CELL_SIZE, b_size * CELL_SIZE, b_size * CELL_SIZE);
         if (b.hp < b.maxHp) drawHealthBar(ctx, b.x * CELL_SIZE, (b.y - 0.5) * CELL_SIZE, b_size * CELL_SIZE, 4 / camera.scale, b.hp / b.maxHp);
@@ -115,7 +102,6 @@ function renderEntities(ctx) {
              ctx.strokeRect(b.x * CELL_SIZE, b.y * CELL_SIZE, b_size * CELL_SIZE, b_size * CELL_SIZE);
         }
     });
-
     gameState.units.forEach(u => {
         const pColor = gameState.players.get(u.ownerId)?.color || 'grey';
         ctx.fillStyle = pColor;
@@ -138,13 +124,11 @@ function renderEntities(ctx) {
          if (u.hp < u.maxHp) drawHealthBar(ctx, u.x * CELL_SIZE - CELL_SIZE, (u.y - 1) * CELL_SIZE, 2 * CELL_SIZE, 3 / camera.scale, u.hp / u.maxHp);
     });
 }
-
 function renderEffects(ctx) {
     ctx.lineWidth = 2 / camera.scale;
     gameState.effects = gameState.effects.filter(e => {
-        e.duration -= 1/60; // Předpokládáme 60 FPS
+        e.duration -= 1/60;
         if (e.duration <= 0) return false;
-        
         ctx.globalAlpha = e.duration / e.maxDuration;
         if (e.unitType === 'LUCISTNIK' || e.unitType === 'VEZ') {
             ctx.strokeStyle = (e.unitType === 'VEZ') ? '#e74c3c' : 'yellow';
@@ -162,7 +146,6 @@ function renderEffects(ctx) {
     });
     ctx.globalAlpha = 1.0;
 }
-
 function drawHealthBar(ctx, x, y, width, height, progress) {
     ctx.fillStyle = '#c0392b';
     ctx.fillRect(x, y, width, height);
@@ -172,13 +155,11 @@ function drawHealthBar(ctx, x, y, width, height, progress) {
     ctx.lineWidth = 0.5 / camera.scale;
     ctx.strokeRect(x, y, width, height);
 }
-
 function renderMinimap() {
     if (!gameState || !visibilityMap) return;
     const size = gameState.config.GRID_SIZE;
     const pixelSize = minimapCanvas.width / size;
     minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
-    
     for(let y = 0; y < size; y++) {
         for(let x = 0; x < size; x++) {
             const state = visibilityMap[y * size + x];
@@ -203,10 +184,6 @@ function renderMinimap() {
         });
     });
 }
-
-
-// --- FUNKCE PRO AKTUALIZACI UI (beze změny) ---
-
 function updateResourceUI() {
     const me = gameState.players.get(myId);
     if(me && me.resources) {
@@ -218,7 +195,6 @@ function updateResourceUI() {
         document.getElementById('pop-display').textContent = `${me.pop?.current || 0}/${me.pop?.cap || 0}`;
     }
 }
-
 function formatCost(cost) {
     let str = '';
     if (cost.gold) str += `💰${cost.gold} `;
@@ -227,14 +203,12 @@ function formatCost(cost) {
     if (cost.stone) str += `⛏️${cost.stone} `;
     return str.trim();
 }
-
 function updateSelectionPanel() {
     const nameEl = document.getElementById('selection-name');
     const detailsEl = document.getElementById('selection-details');
     const actionsEl = document.getElementById('selection-actions');
     detailsEl.innerHTML = '';
     actionsEl.innerHTML = '';
-
     if (selectedBuilding && gameState.buildings.has(selectedBuilding)) {
         const b = gameState.buildings.get(selectedBuilding);
         const b_conf = gameState.config.BUILDINGS[b.type];
@@ -280,27 +254,11 @@ function updateSelectionPanel() {
         nameEl.textContent = 'Nic nevybráno';
     }
 }
-
-// --- ZPRACOVÁNÍ VSTUPU (beze změny) ---
-let isDragging = false, dragStartPos = { x: 0, y: 0 };
-let isBoxSelecting = false, selectionStartPos = { x: 0, y: 0 };
-
-function getMouseWorldPos(e) {
-    const rect = entityCanvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left - camera.x) / camera.scale;
-    const y = (e.clientY - rect.top - camera.y) / camera.scale;
-    return { x: x / CELL_SIZE, y: y / CELL_SIZE };
-}
-
-function getMouseScreenPos(e) {
-    const rect = entityCanvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-}
-
+function getMouseWorldPos(e) { const rect = entityCanvas.getBoundingClientRect(); const x = (e.clientX - rect.left - camera.x) / camera.scale; const y = (e.clientY - rect.top - camera.y) / camera.scale; return { x: x / CELL_SIZE, y: y / CELL_SIZE }; }
+function getMouseScreenPos(e) { const rect = entityCanvas.getBoundingClientRect(); return { x: e.clientX - rect.left, y: e.clientY - rect.top }; }
 function handleMouseDown(e) {
     const worldPos = getMouseWorldPos(e);
-    
-    if (e.button === 0) { // Left click
+    if (e.button === 0) {
         if (placingBuildingType) {
             const builderId = Array.from(selectedUnits).find(id => gameState.units.get(id)?.can_build);
             if(builderId) {
@@ -311,7 +269,6 @@ function handleMouseDown(e) {
             entityCanvas.style.cursor = 'default';
             return;
         }
-        
         isBoxSelecting = true;
         selectionStartPos = getMouseScreenPos(e);
         selectionBox.style.left = `${selectionStartPos.x}px`;
@@ -319,13 +276,11 @@ function handleMouseDown(e) {
         selectionBox.style.width = '0px';
         selectionBox.style.height = '0px';
         selectionBox.style.display = 'block';
-
-    } else if(e.button === 1) { // Middle click
+    } else if(e.button === 1) {
         isDragging = true;
         dragStartPos = { x: e.clientX - camera.x, y: e.clientY - camera.y };
     }
 }
-
 function handleMouseMove(e) {
     if (isDragging) {
         camera.x = e.clientX - dragStartPos.x;
@@ -351,19 +306,15 @@ function handleMouseMove(e) {
         buildGhost.style.width = buildGhost.style.height = `${size * CELL_SIZE * camera.scale}px`;
     }
 }
-
 function handleMouseUp(e) {
-    if (e.button === 0) { // Left click up
+    if (e.button === 0) {
         if (isBoxSelecting) {
             selectionBox.style.display = 'none';
             isBoxSelecting = false;
-            
             const endPos = getMouseScreenPos(e);
             const movedDist = Math.hypot(endPos.x - selectionStartPos.x, endPos.y - selectionStartPos.y);
-
             selectedBuilding = null;
-
-            if (movedDist < 5) { // Click
+            if (movedDist < 5) {
                 selectedUnits.clear();
                 const worldPos = getMouseWorldPos(e);
                 let foundBuilding = null;
@@ -385,17 +336,15 @@ function handleMouseUp(e) {
                     });
                     if (closestUnit) selectedUnits.add(closestUnit.id);
                 }
-            } else { // Drag
+            } else {
                 selectedUnits.clear();
                 const rect = entityCanvas.getBoundingClientRect();
                 const startWorld = getMouseWorldPos({clientX: selectionStartPos.x + rect.left, clientY: selectionStartPos.y + rect.top});
                 const endWorld = getMouseWorldPos({clientX: endPos.x + rect.left, clientY: endPos.y + rect.top});
-
                 const minX = Math.min(startWorld.x, endWorld.x);
                 const maxX = Math.max(startWorld.x, endWorld.x);
                 const minY = Math.min(startWorld.y, endWorld.y);
                 const maxY = Math.max(startWorld.y, endWorld.y);
-
                 gameState.units.forEach(u => {
                     if (u.ownerId === myId && u.x >= minX && u.x <= maxX && u.y >= minY && u.y <= maxY) {
                         selectedUnits.add(u.id);
@@ -407,7 +356,6 @@ function handleMouseUp(e) {
     }
     if (e.button === 1) isDragging = false;
 }
-
 function handleContextMenu(e) {
     e.preventDefault();
     if (placingBuildingType) {
@@ -418,10 +366,8 @@ function handleContextMenu(e) {
     }
     if (selectedUnits.size === 0) return;
     const targetPos = getMouseWorldPos(e);
-    
     let targetEntity = null;
     let minDistSq = 1;
-
     gameState.units.forEach(u => {
         if (u.ownerId !== myId) {
             const distSq = (u.x - targetPos.x)**2 + (u.y - targetPos.y)**2;
@@ -443,20 +389,13 @@ function handleContextMenu(e) {
             }
         }
     });
-
     if (targetEntity) {
         network.sendPlayerAction({ type: 'ATTACK_TARGET', payload: { unitIds: Array.from(selectedUnits), targetId: targetEntity.id } });
     } else {
         network.sendPlayerAction({ type: 'MOVE_UNITS', payload: { unitIds: Array.from(selectedUnits), target: targetPos } });
     }
 }
-
-function handleMouseLeave() {
-     isDragging = false;
-     isBoxSelecting = false;
-     selectionBox.style.display = 'none';
-}
-
+function handleMouseLeave() { isDragging = false; isBoxSelecting = false; selectionBox.style.display = 'none'; }
 function handleWheel(e) {
     e.preventDefault();
     const mousePos = { x: e.clientX - entityCanvas.getBoundingClientRect().left, y: e.clientY - entityCanvas.getBoundingClientRect().top };
@@ -474,11 +413,9 @@ function handleWheel(e) {
     }
     renderFOW();
 }
-
 function handleActionPanelClick(e) {
     const button = e.target.closest('.action-button');
     if(!button) return;
-    
     if (button.dataset.action === 'train') {
         network.sendPlayerAction({ type: 'TRAIN_UNIT', payload: { buildingId: selectedBuilding, unitType: button.dataset.unit } });
     } else if (button.classList.contains('build-button')) {
@@ -490,8 +427,6 @@ function handleActionPanelClick(e) {
         buildGhost.style.width = buildGhost.style.height = `${size * CELL_SIZE * camera.scale}px`;
     }
 }
-
-// --- POMOCNÉ FUNKCE (beze změny) ---
 function resizeCanvas() {
     const viewport = document.getElementById('game-viewport');
     [entityCanvas, fowCanvas].forEach(c => { c.width = viewport.clientWidth; c.height = viewport.clientHeight; });
@@ -506,28 +441,17 @@ function resizeCanvas() {
     }
 }
 
-
-// --- EXPORTOVANÉ ROZHRANÍ MODULU (beze změny) ---
-
 export const game = {
     initialize: (initialPacket, localPlayerId) => {
         myId = localPlayerId;
-        gameState = {
-            ...initialPacket,
-            players: new Map(initialPacket.players.map(p => [p.id, { ...p }])),
-            units: new Map(),
-            buildings: new Map(),
-            effects: []
-        };
+        gameState = { ...initialPacket, players: new Map(initialPacket.players.map(p => [p.id, { ...p }])), units: new Map(), buildings: new Map(), effects: [] };
         visibilityMap = new Uint8Array(gameState.config.GRID_SIZE * gameState.config.GRID_SIZE).fill(FOW_STATE.HIDDEN);
-
         const myPlayer = gameState.players.get(myId);
         if (myPlayer && myPlayer.startPos) {
             const startPos = myPlayer.startPos;
             camera.x = -startPos.x * CELL_SIZE * camera.scale + entityCanvas.width / 2;
             camera.y = -startPos.y * CELL_SIZE * camera.scale + entityCanvas.height / 2;
         }
-
         entityCanvas.addEventListener('mousedown', handleMouseDown);
         entityCanvas.addEventListener('mousemove', handleMouseMove);
         entityCanvas.addEventListener('mouseup', handleMouseUp);
@@ -536,24 +460,18 @@ export const game = {
         entityCanvas.addEventListener('wheel', handleWheel, { passive: false });
         document.getElementById('selection-actions').addEventListener('click', handleActionPanelClick);
         window.addEventListener('resize', resizeCanvas);
-
         resizeCanvas();
         renderFOW();
         updateSelectionPanel();
-        
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
         gameLoop();
-        console.log("Game module initialized.");
     },
-
     handleStateUpdate: (update) => {
         if (!gameState) return;
-
         update.players?.forEach(pData => {
             const player = gameState.players.get(pData.id);
             if (player) Object.assign(player, pData);
         });
-
         let fowChanged = false;
         if (update.visibilityChanges?.length > 0) {
             fowChanged = true;
@@ -561,10 +479,8 @@ export const game = {
                 visibilityMap[cell.y * gameState.config.GRID_SIZE + cell.x] = cell.state;
             });
         }
-        
         gameState.units = new Map(update.units.map(u => [u.id, u]));
         gameState.buildings = new Map(update.buildings.map(b => [b.id, b]));
-        
         update.events?.forEach(event => {
             if (event.type === 'UNITS_DIED') {
                 event.ids.forEach(id => selectedUnits.delete(id));
@@ -572,7 +488,6 @@ export const game = {
                 gameState.effects.push({ ...event, duration: 0.3, maxDuration: 0.3 });
             }
         });
-
         updateResourceUI();
         if (selectedBuilding || selectedUnits.size > 0) updateSelectionPanel();
         if (fowChanged) {
@@ -580,14 +495,11 @@ export const game = {
             renderMinimap();
         }
     },
-
     shutdown: () => {
         if (animationFrameId) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
         }
-        console.log("Game module shut down.");
     }
 };
-
 // --- END OF FILE client/js/game.js ---
