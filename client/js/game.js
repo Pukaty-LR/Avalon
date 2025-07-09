@@ -1,8 +1,12 @@
-// --- START OF FILE client/js/game.js ---
+// --- START OF FILE client/js/game.js (OPRAVENÁ VERZE) ---
 
 // Importujeme sdílenou konfiguraci a síťový modul.
-import { GAME_CONFIG } from '../../shared/config.js';
+// Protože config.js nyní používá 'module.exports', musíme ho importovat tímto způsobem.
+import configModule from '../../shared/config.js';
 import { network } from './network.js';
+
+// Z naimportovaného modulu si vytáhneme samotný objekt s konfigurací.
+const { GAME_CONFIG } = configModule;
 
 // --- STAV HRY A PROMĚNNÉ ---
 let gameState = null;
@@ -99,7 +103,6 @@ function renderEntities(ctx) {
         const b_size = (GAME_CONFIG.BUILDINGS[b.type]?.name === 'Věž' ? 2 : 3);
         ctx.fillRect(b.x * CELL_SIZE, b.y * CELL_SIZE, b_size * CELL_SIZE, b_size * CELL_SIZE);
         
-        // Vykreslení detailů budov
         if (b.type === 'FARMA') { ctx.fillStyle = '#27ae60'; ctx.fillRect((b.x + 0.5) * CELL_SIZE, (b.y + 0.5) * CELL_SIZE, 2 * CELL_SIZE, 2 * CELL_SIZE); }
         if (b.type === 'DUL') { ctx.fillStyle = '#7f8c8d'; ctx.fillRect((b.x + 0.5) * CELL_SIZE, (b.y + 0.5) * CELL_SIZE, 2 * CELL_SIZE, 2 * CELL_SIZE); }
         if (b.type === 'VEZ') { ctx.fillStyle = '#bdc3c7'; ctx.fillRect((b.x + 0.5) * CELL_SIZE, (b.y + 0.5) * CELL_SIZE, 1 * CELL_SIZE, 1 * CELL_SIZE); }
@@ -599,7 +602,6 @@ export const game = {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
         }
-        // Zde by šlo i odebrat event listenery, pokud by to bylo nutné
         console.log("Game module shut down.");
     }
 };
