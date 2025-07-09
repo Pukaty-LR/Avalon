@@ -1,11 +1,14 @@
-// --- START OF FILE shared/config.js (OPRAVENÁ VERZE) ---
+// --- START OF FILE shared/config.js (FINÁLNÍ OPRAVA) ---
 
-const GAME_CONFIG = {
+// Tento soubor je nyní napsán tak, aby fungoval jak na serveru (přes 'require'),
+// tak na klientovi (přes přímé načtení v HTML, které vytvoří globální objekt).
+
+const GAME_CONFIG_DATA = {
     GRID_SIZE: 250,
     TICK_RATE: 50,
-    MAX_PLAYERS: 8, // ZVÝŠENO NA 8
+    MAX_PLAYERS: 8,
     PLAYER_COLORS: ['#4caf50', '#f44336', '#2196f3', '#ffc107', '#9c27b0', '#ff9800', '#00bcd4', '#e91e63'],
-    TERRAIN: { /* ... zbytek souboru beze změny ... */
+    TERRAIN: {
         PLAINS: { name: 'Roviny', movement_cost: 1.0, buildable: true, color: '#a5d6a7' },
         FOREST: { name: 'Les', movement_cost: 1.5, buildable: true, color: '#388e3c' },
         MOUNTAIN: { name: 'Hory', movement_cost: 2.5, buildable: true, color: '#795548' }
@@ -35,5 +38,13 @@ const GAME_CONFIG = {
     }
 };
 
-module.exports = { GAME_CONFIG };
+// Zkontrolujeme, jestli jsme na serveru (CommonJS)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { GAME_CONFIG: GAME_CONFIG_DATA };
+}
+// Pokud jsme na klientovi, tento soubor se načte přes <script> a vytvoří implicitní globální proměnnou.
+// Abychom byli explicitní, můžeme ji přiřadit k 'window'.
+else {
+    window.GAME_CONFIG = GAME_CONFIG_DATA;
+}
 // --- END OF FILE shared/config.js ---
