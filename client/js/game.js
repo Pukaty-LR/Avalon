@@ -1,12 +1,10 @@
-// --- START OF FILE client/js/game.js (OPRAVENÁ VERZE) ---
+// --- START OF FILE client/js/game.js (FINÁLNÍ OPRAVENÁ VERZE) ---
 
-// Importujeme sdílenou konfiguraci a síťový modul.
-// Protože config.js nyní používá 'module.exports', musíme ho importovat tímto způsobem.
-import configModule from '../../shared/config.js';
+// OPRAVA JE ZDE:
+// Místo importu neexistujícího 'default' exportu, importujeme přímo
+// pojmenovaný export 'GAME_CONFIG'. Toto je správný způsob.
+import { GAME_CONFIG } from '../../shared/config.js';
 import { network } from './network.js';
-
-// Z naimportovaného modulu si vytáhneme samotný objekt s konfigurací.
-const { GAME_CONFIG } = configModule;
 
 // --- STAV HRY A PROMĚNNÉ ---
 let gameState = null;
@@ -48,7 +46,7 @@ function gameLoop() {
     entityCtx.restore();
 }
 
-// --- RENDEROVACÍ FUNKCE ---
+// --- RENDEROVACÍ FUNKCE (beze změny) ---
 
 function renderBoard(ctx) {
     const { GRID_SIZE, TERRAIN } = gameState.config;
@@ -207,7 +205,7 @@ function renderMinimap() {
 }
 
 
-// --- FUNKCE PRO AKTUALIZACI UI ---
+// --- FUNKCE PRO AKTUALIZACI UI (beze změny) ---
 
 function updateResourceUI() {
     const me = gameState.players.get(myId);
@@ -283,7 +281,7 @@ function updateSelectionPanel() {
     }
 }
 
-// --- ZPRACOVÁNÍ VSTUPU ---
+// --- ZPRACOVÁNÍ VSTUPU (beze změny) ---
 let isDragging = false, dragStartPos = { x: 0, y: 0 };
 let isBoxSelecting = false, selectionStartPos = { x: 0, y: 0 };
 
@@ -493,7 +491,7 @@ function handleActionPanelClick(e) {
     }
 }
 
-// --- POMOCNÉ FUNKCE ---
+// --- POMOCNÉ FUNKCE (beze změny) ---
 function resizeCanvas() {
     const viewport = document.getElementById('game-viewport');
     [entityCanvas, fowCanvas].forEach(c => { c.width = viewport.clientWidth; c.height = viewport.clientHeight; });
@@ -509,15 +507,9 @@ function resizeCanvas() {
 }
 
 
-// --- EXPORTOVANÉ ROZHRANÍ MODULU ---
+// --- EXPORTOVANÉ ROZHRANÍ MODULU (beze změny) ---
 
 export const game = {
-    /**
-     * Inicializuje herní modul, nastaví stav a spustí herní smyčku.
-     * Volá se z main.js, když server pošle 'gameStarted'.
-     * @param {object} initialPacket - Počáteční data o hře.
-     * @param {string} localPlayerId - ID tohoto klienta.
-     */
     initialize: (initialPacket, localPlayerId) => {
         myId = localPlayerId;
         gameState = {
@@ -536,7 +528,6 @@ export const game = {
             camera.y = -startPos.y * CELL_SIZE * camera.scale + entityCanvas.height / 2;
         }
 
-        // Připojení listenerů až po startu hry
         entityCanvas.addEventListener('mousedown', handleMouseDown);
         entityCanvas.addEventListener('mousemove', handleMouseMove);
         entityCanvas.addEventListener('mouseup', handleMouseUp);
@@ -555,10 +546,6 @@ export const game = {
         console.log("Game module initialized.");
     },
 
-    /**
-     * Zpracovává aktualizace stavu hry ze serveru.
-     * @param {object} update - Balíček s novými daty.
-     */
     handleStateUpdate: (update) => {
         if (!gameState) return;
 
@@ -594,9 +581,6 @@ export const game = {
         }
     },
 
-    /**
-     * Zastaví herní smyčku a vyčistí stav.
-     */
     shutdown: () => {
         if (animationFrameId) {
             cancelAnimationFrame(animationFrameId);
