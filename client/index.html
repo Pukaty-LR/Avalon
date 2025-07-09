@@ -1,12 +1,12 @@
-<!-- START OF FILE client/index.html -->
+<!-- START OF FILE client/index.html (OPRAVENÁ VERZE) -->
 
 <!DOCTYPE html>
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
     <title>AVALON: Zrození Impéria</title>
-    <!-- Odkaz na CSS, cesta musí odpovídat vaší struktuře -->
-    <link rel="stylesheet" href="styl.css">
+    <!-- OPRAVA: Cesta k CSS je nyní absolutní od kořene webu, což je spolehlivější. -->
+    <link rel="stylesheet" href="/styl.css">
 </head>
 <body>
     <!-- Hlavní menu - beze změny -->
@@ -72,16 +72,8 @@
         </div>
     </div>
 
-    <!-- Načtení knihovny Socket.IO přímo ze serveru -->
     <script src="/socket.io/socket.io.js"></script>
-    
-    <!-- 
-      KOUZLO SE DĚJE ZDE:
-      Místo obrovského bloku kódu načítáme jediný soubor.
-      'type="module"' nám umožňuje používat 'import' a 'export' v klientských skriptech,
-      což je klíčové pro naši novou, čistou architekturu.
-    -->
-    <script src="js/main.js" type="module"></script>
+    <script src="/js/main.js" type="module"></script>
 </body>
 </html>
 
