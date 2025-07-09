@@ -1,9 +1,18 @@
 // --- START OF FILE server/gameInstance.js (FINÁLNÍ OPRAVENÁ A KOMPLETNÍ VERZE) ---
 
+// Dynamický import ES modulu z CommonJS modulu není spolehlivý v této struktuře.
+// Použijeme standardní require, protože config.js je nyní univerzální.
 const { GAME_CONFIG } = require('../shared/config.js');
 
 const createId = (length = 5) => Math.random().toString(36).substr(2, length).toUpperCase();
 const FOW_STATE = { HIDDEN: 0, EXPLORED: 1, VISIBLE: 2 };
+
+// Pomocná funkce pro získání velikosti budovy, aby se předešlo pádům hry.
+const getBuildingSize = (buildingType) => {
+    // Věž má specifickou velikost 2, ostatní budovy (včetně základny) mají 3.
+    // Toto je robustní a zabrání chybě 'cannot read property of undefined'.
+    return GAME_CONFIG.BUILDINGS[buildingType]?.name === 'Věž' ? 2 : 3;
+};
 
 class GameInstance {
     constructor(gameCode, players) {
@@ -23,7 +32,6 @@ class GameInstance {
     initializeGame() {
         this.board = this.generateMap(GAME_CONFIG.GRID_SIZE);
         
-        // TOTO BYLO ROZBITÉ A NYNÍ JE OPRAVENO:
         const startPositions = [
             { x: 30, y: 30 }, { x: GAME_CONFIG.GRID_SIZE - 30, y: 30 },
             { x: GAME_CONFIG.GRID_SIZE - 30, y: GAME_CONFIG.GRID_SIZE - 30 }, { x: 30, y: GAME_CONFIG.GRID_SIZE - 30 },
@@ -32,7 +40,6 @@ class GameInstance {
         ];
 
         Object.values(this.players).forEach((player, index) => {
-            // TOTO BYLO ROZBITÉ A NYNÍ JE OPRAVENO:
             this.visibilityMaps[player.id] = new Uint8Array(GAME_CONFIG.GRID_SIZE * GAME_CONFIG.GRID_SIZE).fill(FOW_STATE.HIDDEN);
             const pos = startPositions[index % startPositions.length];
             player.startPos = pos;
@@ -173,7 +180,7 @@ class GameInstance {
             }
             if (target) {
                 const isBuilding = !!target.buildProgress;
-                const targetSize = isBuilding ? (GAME_CONFIG.BUILDINGS[target.type].name === 'Věž' ? 2 : 3) : 1;
+                const targetSize = getBuildingSize(target.type);
                 const targetX = target.x + (isBuilding ? targetSize / 2 : 0);
                 const targetY = target.y + (isBuilding ? targetSize / 2 : 0);
                 const distSq = (u.x - targetX) ** 2 + (u.y - targetY) ** 2;
@@ -209,7 +216,7 @@ class GameInstance {
                 if (target) b.targetUnitId = target.id;
             }
             if (target) {
-                const b_size = b_conf.name === 'Věž' ? 2 : 3;
+                const b_size = getBuildingSize(b.type);
                 const b_center_x = b.x + b_size / 2;
                 const b_center_y = b.y + b_size / 2;
                 const distSq = (b_center_x - target.x) ** 2 + (b_center_y - target.y) ** 2;
@@ -274,7 +281,7 @@ class GameInstance {
             };
             Object.values(player.units).forEach(u => reveal(u.x, u.y, GAME_CONFIG.UNITS[u.type].vision));
             Object.values(this.buildings).filter(b => b.ownerId === player.id && b.buildProgress === 1).forEach(b => {
-                 const b_size = GAME_CONFIG.BUILDINGS[b.type].name === 'Věž' ? 2 : 3;
+                 const b_size = getBuildingSize(b.type);
                  reveal(b.x + b_size / 2, b.y + b_size / 2, GAME_CONFIG.BUILDINGS[b.type].vision)
             });
             if (dirtyCells.length > 0) {
@@ -307,7 +314,7 @@ class GameInstance {
                 const { builderId, structureType, position } = action.payload;
                 const builder = pData.units[builderId];
                 const config = GAME_CONFIG.BUILDINGS[structureType];
-                if (builder?.can_build && config && this.canAfford(pData, config.cost)) {
+                if (builder && GAME_CONFIG.UNITS[builder.type].can_build && config && this.canAfford(pData, config.cost)) {
                     const terrainType = this.board[position.y]?.[position.x];
                     if (config.placement && config.placement !== 'ANY' && config.placement !== terrainType) return;
                     this.deductCost(pData, config.cost);
@@ -337,7 +344,7 @@ class GameInstance {
         const u_config = GAME_CONFIG.UNITS[unitType];
         const newUnit = {
             id: createId(), ownerId: player.id, type: unitType, x: pos.x, y: pos.y,
-            hp: u_config.hp, maxHp: u_config.hp, can_build: u_config.can_build || false,
+            hp: u_config.hp, maxHp: u_config.hp,
             attackCooldown: 0, moveTarget: null, targetId: null,
         };
         this.units[newUnit.id] = newUnit;
@@ -347,7 +354,7 @@ class GameInstance {
 
     createBuilding(player, structureType, x, y) {
         const config = GAME_CONFIG.BUILDINGS[structureType];
-        const b_size = (config.name === 'Věž' ? 2 : 3);
+        const b_size = getBuildingSize(structureType);
         const newBuilding = {
             id: createId(), ownerId: player.id, type: structureType, x, y, hp: 1, maxHp: config.hp,
             buildProgress: 0, buildTime: config.build_time, trainingQueue: [], 
@@ -363,7 +370,7 @@ class GameInstance {
         const visionRange = GAME_CONFIG.UNITS[attacker.type]?.vision || GAME_CONFIG.BUILDINGS[attacker.type]?.vision;
         let min_dist_sq = visionRange ** 2;
         const isAttackerBuilding = !!attacker.buildProgress;
-        const attacker_size = isAttackerBuilding ? (GAME_CONFIG.BUILDINGS[attacker.type].name === 'Věž' ? 2 : 3) : 0;
+        const attacker_size = isAttackerBuilding ? getBuildingSize(attacker.type) : 0;
         const attacker_center_x = attacker.x + (isAttackerBuilding ? attacker_size / 2 : 0);
         const attacker_center_y = attacker.y + (isAttackerBuilding ? attacker_size / 2 : 0);
         allUnits.forEach(potentialTarget => {
@@ -378,7 +385,7 @@ class GameInstance {
         if (!isAttackerBuilding) {
             allBuildings.forEach(potentialTarget => {
                  if (potentialTarget.ownerId !== attacker.ownerId && !deadEntities.buildings.has(potentialTarget.id) && potentialTarget.buildProgress === 1) {
-                    const targetSize = GAME_CONFIG.BUILDINGS[potentialTarget.type].name === 'Věž' ? 2 : 3;
+                    const targetSize = getBuildingSize(potentialTarget.type);
                     const targetX = potentialTarget.x + targetSize/2;
                     const targetY = potentialTarget.y + targetSize/2;
                     const dist_sq = (attacker_center_x - targetX)**2 + (attacker_center_y - targetY)**2;
@@ -431,7 +438,7 @@ class GameInstance {
                 }
             });
             Object.values(this.buildings).forEach(b => {
-                const b_size = GAME_CONFIG.BUILDINGS[b.type].name === 'Věž' ? 2 : 3;
+                const b_size = getBuildingSize(b.type);
                 if (isVisible(b.x + b_size/2, b.y + b_size/2)) {
                     packet.buildings.push({ id: b.id, ownerId: b.ownerId, type: b.type, x: b.x, y: b.y, hp: b.hp, maxHp: b.maxHp, buildProgress: b.buildProgress, trainingQueue: b.trainingQueue.map(i => ({unitType: i.unitType, progress: i.progress})) });
                 }
@@ -449,6 +456,8 @@ class GameInstance {
         return allPackets;
     }
 
+    canAfford(player, cost) { return Object.keys(cost).every(res => player.resources[res] >= cost[res]); }
+    deductCost(player, cost) { Object.keys(cost).forEach(res => player.resources[res] -= cost[res]); }
     calculatePlayerPop(player) { player.pop.current = Object.keys(player.units).length; }
     calculatePlayerPopCap(player) {
         player.pop.cap = Object.values(this.buildings)
