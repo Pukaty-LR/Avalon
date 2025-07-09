@@ -1,0 +1,88 @@
+<!-- START OF FILE client/index.html -->
+
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>AVALON: Zrození Impéria</title>
+    <!-- Odkaz na CSS, cesta musí odpovídat vaší struktuře -->
+    <link rel="stylesheet" href="styl.css">
+</head>
+<body>
+    <!-- Hlavní menu - beze změny -->
+    <div id="main-menu-section" class="screen">
+        <div class="menu-container">
+            <h1>AVALON</h1>
+            <h2>Zrození Impéria</h2>
+            <input type="text" id="playerNameInput" placeholder="Jméno tvého rodu...">
+            <button id="soloGameBtn">Hra pro jednoho</button>
+            <button id="findGameBtn">Najít veřejnou hru</button>
+            <button id="createGameBtn">Vytvořit soukromou hru</button>
+            <div class="join-game-form">
+                <input type="text" id="joinCodeInput" placeholder="Kód hry...">
+                <button id="joinGameBtn">Připojit se</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Lobby - beze změny -->
+    <div id="lobby-section" class="screen" style="display: none;">
+         <div class="lobby-container">
+            <h3>Čeká se na velitele...</h3>
+            <h4>Kód hry: <span id="lobby-game-code"></span></h4>
+            <ul id="playerList"></ul>
+            <button id="startGameBtn" style="display:none;">Spustit Válku</button>
+            <p id="waiting-message">Čekání na hosta, aby spustil hru...</p>
+        </div>
+    </div>
+
+    <!-- Herní obrazovka - beze změny -->
+    <div id="game-section" style="display: none;">
+        <div class="top-bar">
+            <div class="resource-panel">
+                <div class="resource" title="Zlato">💰 <span id="gold-display">0</span></div>
+                <div class="resource" title="Jídlo">🍖 <span id="food-display">0</span></div>
+                <div class="resource" title="Dřevo">🌲 <span id="wood-display">0</span></div>
+                <div class="resource" title="Kámen">⛏️ <span id="stone-display">0</span></div>
+                <div class="resource" title="Věda">📚 <span id="science-display">0</span></div>
+            </div>
+             <div class="resource-panel">
+                <div class="resource" title="Populace / Limit">🧑‍🤝‍🧑 <span id="pop-display">0/0</span></div>
+             </div>
+        </div>
+
+        <div id="game-container">
+            <div id="game-viewport">
+                <canvas id="entity-canvas"></canvas>
+                <canvas id="fow-canvas"></canvas>
+                <div id="build-ghost"></div>
+                <div id="selection-box"></div>
+            </div>
+            <div class="right-panel">
+                 <div class="selection-panel">
+                    <h3 id="selection-name">Nic nevybráno</h3>
+                    <div id="selection-details"></div>
+                    <div id="selection-actions"></div>
+                </div>
+                <div class="minimap-panel">
+                    <h4>Mapa Vlivu</h4>
+                    <canvas id="minimap"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Načtení knihovny Socket.IO přímo ze serveru -->
+    <script src="/socket.io/socket.io.js"></script>
+    
+    <!-- 
+      KOUZLO SE DĚJE ZDE:
+      Místo obrovského bloku kódu načítáme jediný soubor.
+      'type="module"' nám umožňuje používat 'import' a 'export' v klientských skriptech,
+      což je klíčové pro naši novou, čistou architekturu.
+    -->
+    <script src="js/main.js" type="module"></script>
+</body>
+</html>
+
+<!-- END OF FILE client/index.html -->
