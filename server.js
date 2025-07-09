@@ -1,14 +1,14 @@
 // --- START OF FILE server.js ---
 
-import http from 'http';
-import express from 'express';
-import { Server } from 'socket.io';
-import path from 'path';
-import { fileURLToPath } from 'url';
+const http = require('http');
+const express = require('express');
+const { Server } = require("socket.io");
+const path = require('path');
 
-// Důležité: Importujeme naše nové moduly pro správu lobby a her
+// Protože projekt není nastaven jako ES modul ("type": "module" v package.json),
+// musíme použít starší syntaxi 'require'.
 // Cesta nyní vede do složky /server
-import { LobbyManager } from './server/lobbyManager.js';
+const { LobbyManager } = require('./server/lobbyManager.js');
 
 // --- NASTAVENÍ SERVERU ---
 
@@ -17,35 +17,28 @@ const server = http.createServer(app);
 const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 
-// Nastavení pro správné fungování __dirname s ES moduly
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // --- STATICKÉ SOUBORY ---
 
-// Server nyní běží z kořenového adresáře, takže cesty jsou jednodušší.
+// V CommonJS je '__dirname' globální proměnná, která obsahuje cestu k aktuální složce.
 // Servírujeme obsah složky 'client' přímo.
 app.use(express.static(path.join(__dirname, 'client')));
 // Obsah složky 'shared' bude dostupný pod URL /shared
+// Toto budeme potřebovat, aby si klient mohl načíst konfiguraci.
 app.use('/shared', express.static(path.join(__dirname, 'shared')));
-
 
 // --- INICIALIZACE SPRÁVCE LOBBY ---
 
 // Vytvoříme jednu instanci LobbyManageru, které předáme 'io' objekt.
-// Tento manažer se bude starat o veškerou komunikaci a logiku před začátkem hry.
 const lobbyManager = new LobbyManager(io);
-
 
 // --- ZPRACOVÁNÍ PŘIPOJENÍ ---
 
 // Toto je hlavní vstupní bod pro každého nového hráče.
-// Místo psaní veškeré logiky sem, pouze předáme nově připojený socket našemu manažerovi.
+// Pouze předáme nově připojený socket našemu manažerovi, který se postará o zbytek.
 io.on('connection', (socket) => {
     console.log(`A new hero has arrived: ${socket.id}`);
     lobbyManager.handleNewConnection(socket);
 });
-
 
 // --- SPUŠTĚNÍ SERVERU ---
 
